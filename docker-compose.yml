@@ -40,8 +40,9 @@ services:
     depends_on:
       - backend
     ports:
-      # Publicado só no host; o Nginx do servidor faz o TLS e encaminha para cá.
-      - "127.0.0.1:${WEB_PORT:-8080}:80"
+      # Por padrão só no próprio host. Se o Nginx (TLS) estiver em outra máquina,
+      # defina WEB_BIND com o IP da rede local deste servidor (ex.: 192.168.100.253).
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80"
 
   # WhatsApp (opcional): docker compose --profile whatsapp up -d
   # Na tela Notificações use a URL http://wppconnect:21465 e a mesma WPP_SECRET_KEY.
