@@ -54,6 +54,20 @@ A interface fica em `http://127.0.0.1:8080` (publicada só no host). Configure o
 
 **Backup:** faça backup do volume `pgdata` (ex.: `docker compose exec db pg_dump -U mikrotik mikrotik > backup.sql`) **e** do arquivo `secrets/master_key`, guardados em locais separados.
 
+### Sem Docker (Node direto no servidor)
+
+Se preferir rodar sem Docker, o backend usa `npm --prefix backend run build && npm --prefix backend start` (com as variáveis do `.env`). O frontend pode ser servido pelo `vite preview`, que encaminha `/api` para o backend:
+
+```bash
+ALLOWED_HOSTS=mikrotik.slot1.info API_URL=http://localhost:3000 npm --prefix frontend run preview -- --host 127.0.0.1
+```
+
+- `ALLOWED_HOSTS`: domínios aceitos, separados por vírgula. O padrão é `mikrotik.slot1.info`. Sem o domínio na lista, o Vite responde *"Blocked request. This host is not allowed"*.
+- `API_URL`: endereço do backend (padrão `http://localhost:3000`).
+- O Nginx do servidor faz o TLS e encaminha para `http://127.0.0.1:4173`.
+
+Para produção, o recomendado continua sendo o Docker Compose: o container `web` já serve os arquivos com Nginx e não depende do Vite.
+
 ## Desenvolvimento local
 
 Requisitos: Node 22+.
