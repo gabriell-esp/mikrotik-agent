@@ -4,6 +4,7 @@ import { hashPassword, SecretBox, verifyPassword } from '../src/lib/crypto.js';
 import { stripSecrets } from '../src/modules/registry.js';
 import { methodOrder } from '../src/routeros/manager.js';
 import { classifyNetError } from '../src/routeros/net.js';
+import { explainFetchError } from '../src/services/whatsapp.js';
 import { parseDuration, versionAtLeast } from '../src/routeros/parse.js';
 import { encodeLength, encodeSentence, SentenceParser } from '../src/routeros/protocol.js';
 import { sanitize } from '../src/services/audit.js';
@@ -117,6 +118,13 @@ describe('segurança', () => {
     expect(api.message).toMatch(/api-ssl provavelmente está sem certificado/);
     const rest = classifyNetError(Object.assign(new Error('write EPROTO ' + msg), { code: 'EPROTO' }), 'rest', 443);
     expect(rest.message).toMatch(/www-ssl/);
+  });
+
+  it('explica a causa real do "fetch failed" do WPPConnect', () => {
+    const f = (code: string) => explainFetchError(Object.assign(new TypeError('fetch failed'), { cause: { code } }));
+    expect(f('ENOTFOUND')).toMatch(/nome do servidor não encontrado/);
+    expect(f('ECONNREFUSED')).toMatch(/conexão recusada/);
+    expect(explainFetchError(new TypeError('fetch failed'))).toBe('fetch failed');
   });
 
   it('ordem de métodos prioriza TLS e só usa texto puro se liberado', () => {

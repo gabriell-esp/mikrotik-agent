@@ -29,6 +29,27 @@ export const saveWhatsappSettings = (s: WhatsappSettings) => setSetting('whatsap
 
 export class WhatsappError extends Error {}
 
+/** O fetch do Node só diz "fetch failed"; a causa real fica em err.cause. */
+export function explainFetchError(err: Error & { cause?: { code?: string; message?: string } }): string {
+  const code = err.cause?.code ?? '';
+  switch (code) {
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return 'nome do servidor não encontrado. Confira a URL e, no Docker, se o serviço "wppconnect" está rodando (perfil whatsapp).';
+    case 'ECONNREFUSED':
+      return 'conexão recusada. O WPPConnect está parado, reiniciando ou ouvindo em outra porta.';
+    case 'ECONNRESET':
+    case 'UND_ERR_SOCKET':
+      return 'conexão encerrada pelo servidor. Verifique os logs do WPPConnect.';
+    case 'EHOSTUNREACH':
+    case 'ENETUNREACH':
+    case 'ETIMEDOUT':
+    case 'UND_ERR_CONNECT_TIMEOUT':
+      return 'servidor inalcançável pela rede.';
+  }
+  return err.cause?.message ? `${err.message} (${err.cause.message})` : err.message;
+}
+
 /** Normaliza número brasileiro: só dígitos e DDI 55 quando ausente. */
 export function normalizePhone(v: string): string {
   const d = v.replace(/\D/g, '');
@@ -65,10 +86,9 @@ export class WppClient {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (e) {
-      const err = e as Error;
-      throw new WhatsappError(
-        err.name === 'TimeoutError' ? 'O servidor WPPConnect não respondeu no prazo.' : `Não foi possível conectar ao WPPConnect (${this.s.base_url}): ${err.message}`,
-      );
+      const err = e as Error & { cause?: { code?: string; message?: string } };
+      if (err.name === 'TimeoutError') throw new WhatsappError('O servidor WPPConnect não respondeu no prazo.');
+      throw new WhatsappError(`Não foi possível conectar ao WPPConnect (${this.s.base_url}): ${explainFetchError(err)}`);
     }
     const text = await res.text();
     let data: any = null;
