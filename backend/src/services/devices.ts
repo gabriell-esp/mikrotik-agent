@@ -32,13 +32,26 @@ export async function getDeviceRow(id: number): Promise<DeviceRow> {
   return d;
 }
 
+/** Decifra a senha do roteador; falha aqui indica chave mestra diferente da usada no cadastro. */
+function decryptDevicePassword(d: DeviceRow): string {
+  try {
+    return secretBox().decrypt(d.password_enc);
+  } catch {
+    throw new RosError(
+      'config',
+      `Não foi possível decifrar a senha salva de "${d.name}": a chave mestra (MASTER_KEY) desta instância é diferente da usada no cadastro. ` +
+        'Verifique se há outro backend rodando com outra chave contra o mesmo banco, ou salve a senha do equipamento novamente.',
+    );
+  }
+}
+
 export function connInfo(d: DeviceRow): DeviceConnInfo {
   return {
     id: d.id,
     name: d.name,
     host: d.host,
     username: d.username,
-    password: secretBox().decrypt(d.password_enc),
+    password: decryptDevicePassword(d),
     api_method: d.api_method,
     api_ssl_port: d.api_ssl_port,
     rest_port: d.rest_port,

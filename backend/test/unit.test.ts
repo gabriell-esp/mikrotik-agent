@@ -127,6 +127,12 @@ describe('segurança', () => {
     expect(explainFetchError(new TypeError('fetch failed'))).toBe('fetch failed');
   });
 
+  it('senha cifrada com outra chave mestra gera erro explicativo', async () => {
+    const { connInfo } = await import('../src/services/devices.js');
+    const other = new SecretBox(Buffer.alloc(32, 9)).encrypt('x');
+    expect(() => connInfo({ id: 1, name: 'RB X', password_enc: other } as any)).toThrow(/chave mestra \(MASTER_KEY\) desta instância é diferente/);
+  });
+
   it('ordem de métodos prioriza TLS e só usa texto puro se liberado', () => {
     expect(methodOrder({ api_method: 'auto', allow_plaintext: false, detected_method: null })).toEqual(['api-ssl', 'rest']);
     expect(methodOrder({ api_method: 'auto', allow_plaintext: true, detected_method: 'rest' })).toEqual(['rest', 'api-ssl', 'api']);

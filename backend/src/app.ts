@@ -17,7 +17,7 @@ import { wireguardRoutes } from './routes/wireguard.js';
 
 const ROS_HTTP_STATUS: Record<string, number> = {
   unreachable: 502, refused: 502, tls: 502, timeout: 504, protocol: 502,
-  auth: 502, permission: 502, unsupported: 422, command: 422,
+  auth: 502, permission: 502, unsupported: 422, command: 422, config: 500,
 };
 
 export async function buildApp(opts: { logger?: boolean } = {}): Promise<FastifyInstance> {

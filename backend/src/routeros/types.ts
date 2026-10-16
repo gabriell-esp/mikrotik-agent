@@ -31,7 +31,8 @@ export type RosErrorKind =
   | 'timeout'     // conectado, mas comando sem resposta no prazo
   | 'unsupported' // comando/menu inexistente nesta versão ou pacote
   | 'command'     // erro retornado pelo RouterOS ao executar
-  | 'protocol';   // resposta inesperada
+  | 'protocol'    // resposta inesperada
+  | 'config';     // problema local (ex.: senha cifrada com outra chave mestra)
 
 export class RosError extends Error {
   constructor(public readonly kind: RosErrorKind, message: string, public readonly method?: RosMethod) {
