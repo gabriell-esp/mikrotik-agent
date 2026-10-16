@@ -52,8 +52,12 @@ RouterOS v6 (não tem a política `rest-api`):
 ### 2. Certificado e serviços cifrados
 
 ```routeros
+# CA local (necessária para assinar; sem ela o RouterOS responde "CA not found")
+/certificate add name=slot1-ca common-name=slot1-ca key-usage=key-cert-sign,crl-sign days-valid=3650
+/certificate sign slot1-ca
+# Certificado dos serviços, assinado pela CA
 /certificate add name=slot1-api common-name=slot1-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign slot1-api
+/certificate sign slot1-api ca=slot1-ca
 /ip service set api-ssl certificate=slot1-api disabled=no address=10.200.0.1/32
 # REST (somente v7.1+):
 /ip service set www-ssl certificate=slot1-api disabled=no address=10.200.0.1/32
@@ -86,14 +90,18 @@ Ao cadastrar a partir de um peer, o sistema sugere o primeiro IP `/32` do `allow
 O RouterOS recusou a negociação TLS. Na grande maioria das vezes, o serviço `api-ssl` (ou `www-ssl`) está habilitado **sem certificado**. Corrija na MikroTik:
 
 ```routeros
+/certificate add name=slot1-ca common-name=slot1-ca key-usage=key-cert-sign,crl-sign days-valid=3650
+/certificate sign slot1-ca
 /certificate add name=slot1-api common-name=slot1-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign slot1-api
+/certificate sign slot1-api ca=slot1-ca
 /ip service set api-ssl certificate=slot1-api disabled=no
 # opcional, para o REST (v7.1+):
 /ip service set www-ssl certificate=slot1-api disabled=no
 ```
 
-Confira com `/ip service print detail where name~"ssl"`. O campo `certificate` deve mostrar `slot1-api`. A assinatura (`sign`) pode levar alguns segundos. Aguarde aparecer a flag `K` (chave privada) em `/certificate print` antes de testar.
+Confira com `/ip service print detail where name~"ssl"`. O campo `certificate` deve mostrar `slot1-api`. A assinatura (`sign`) pode levar alguns segundos. Aguarde as flags `K` (chave privada) e `T` (confiável) em `/certificate print` antes de testar.
+
+Se o `sign` responder **"CA not found"**, falta a CA local: crie e assine o `slot1-ca` primeiro e assine o certificado com `ca=slot1-ca`, como acima. Se o `slot1-api` já existir, não precisa recriá-lo; basta rodar `/certificate sign slot1-api ca=slot1-ca`.
 
 Se ainda falhar, verifique:
 - **Versão do TLS** (v7): o padrão aceita TLS 1.2. Não restrinja a uma versão mais antiga.
