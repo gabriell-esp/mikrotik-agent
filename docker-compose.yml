@@ -1,0 +1,66 @@
+# Slot1 · Gerência MikroTik — stack de produção.
+# Antes de subir: copie .env.example para .env e crie secrets/master_key (veja README).
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mikrotik
+      POSTGRES_USER: mikrotik
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mikrotik -d mikrotik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://mikrotik:${POSTGRES_PASSWORD}@db:5432/mikrotik
+      MASTER_KEY_FILE: /run/secrets/master_key
+      HOST: 0.0.0.0
+      PORT: 3000
+    secrets:
+      - master_key
+    depends_on:
+      db:
+        condition: service_healthy
+    # O backend precisa alcançar os IPs dos túneis WireGuard (rota no host Docker).
+    # Se preferir usar a pilha de rede do host, troque por: network_mode: host
+    # (e ajuste DATABASE_URL e o proxy do serviço "web").
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      # Publicado só no host; o Nginx do servidor faz o TLS e encaminha para cá.
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+
+  # WhatsApp (opcional): docker compose --profile whatsapp up -d
+  # Na tela Notificações use a URL http://wppconnect:21465 e a mesma WPP_SECRET_KEY.
+  wppconnect:
+    image: wppconnect/wppconnect-server:${WPP_SERVER_TAG:-latest}
+    profiles: ["whatsapp"]
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: ${WPP_SECRET_KEY:-defina-WPP_SECRET_KEY-no-.env}
+    volumes:
+      - wpp_tokens:/usr/src/wpp-server/tokens
+      - wpp_userdata:/usr/src/wpp-server/userDataDir
+    # Sem porta publicada: só o backend (rede interna do Compose) acessa a API.
+
+secrets:
+  master_key:
+    file: ./secrets/master_key
+
+volumes:
+  pgdata:
+  wpp_tokens:
+  wpp_userdata:
