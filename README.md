@@ -42,7 +42,7 @@ Requisitos: Docker + Compose, e **rota do servidor para as redes dos túneis Wir
 cp .env.example .env                       # ajuste POSTGRES_PASSWORD e o restante
 mkdir -p secrets
 openssl rand -base64 32 > secrets/master_key   # GUARDE UMA CÓPIA SEGURA: sem ela as senhas dos roteadores não são recuperáveis
-chmod 600 secrets/master_key
+chown 1000:1000 secrets/master_key && chmod 400 secrets/master_key   # o backend roda como UID 1000 (node)
 docker compose up -d --build                      # sem WhatsApp
 docker compose --profile whatsapp up -d --build   # com o WPPConnect Server (alertas no WhatsApp)
 docker compose exec backend node dist/cli/create-admin.js admin "Administrador"
