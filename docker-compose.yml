@@ -55,6 +55,10 @@ services:
       - wpp_tokens:/usr/src/wpp-server/tokens
       - wpp_userdata:/usr/src/wpp-server/userDataDir
     # Sem porta publicada: só o backend (rede interna do Compose) acessa a API.
+    # Se o backend usar "network_mode: host", ele não resolve o nome "wppconnect":
+    # descomente as linhas abaixo e use a URL http://127.0.0.1:21465 na tela Notificações.
+    # ports:
+    #   - "127.0.0.1:21465:21465"
 
 secrets:
   master_key:

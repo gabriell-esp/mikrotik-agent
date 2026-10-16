@@ -124,7 +124,7 @@ O PPPoE é administrado nas MikroTiks dos clientes (condomínios), onde o servid
 ## Notificações pelo WhatsApp (WPPConnect)
 
 1. Defina `WPP_SECRET_KEY` no `.env` e suba com `docker compose --profile whatsapp up -d`. O WPPConnect fica só na rede interna do Compose, sem porta publicada.
-2. No sistema, abra **Notificações**, informe a URL `http://wppconnect:21465`, a sessão (ex.: `slot1`) e a mesma chave secreta, e ative o envio.
+2. No sistema, abra **Notificações**, informe a URL `http://wppconnect:21465` (ou `http://127.0.0.1:21465` se o backend estiver em `network_mode: host`, publicando a porta como indicado no `docker-compose.yml`), a sessão (ex.: `slot1`) e a mesma chave secreta, e ative o envio.
 3. Clique em **Conectar WhatsApp** e leia o QR code em *WhatsApp → Aparelhos conectados*. A tela confirma sozinha. Recomenda-se um número exclusivo para o monitoramento.
 4. Cadastre os **destinatários** (número com DDD ou grupo, que pode ser escolhido da lista do número conectado), os eventos de cada um e, se quiser, os clientes que ele acompanha. Use **Testar** para validar.
 
