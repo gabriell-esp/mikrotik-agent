@@ -3,6 +3,7 @@ import { effectivePermissions } from '../src/auth/permissions.js';
 import { hashPassword, SecretBox, verifyPassword } from '../src/lib/crypto.js';
 import { stripSecrets } from '../src/modules/registry.js';
 import { methodOrder } from '../src/routeros/manager.js';
+import { classifyNetError } from '../src/routeros/net.js';
 import { parseDuration, versionAtLeast } from '../src/routeros/parse.js';
 import { encodeLength, encodeSentence, SentenceParser } from '../src/routeros/protocol.js';
 import { sanitize } from '../src/services/audit.js';
@@ -107,6 +108,15 @@ describe('segurança', () => {
     const tec = effectivePermissions('tecnico', [], ['pppoe.disconnect']);
     expect(tec.has('pppoe.disconnect')).toBe(false);
     expect(effectivePermissions('admin', [], ['users.manage']).has('users.manage')).toBe(true);
+  });
+
+  it('alerta TLS 40 do RouterOS vira orientação sobre certificado', () => {
+    const msg = '8088EB0036790000:error:0A000410:SSL routines:ssl3_read_bytes:ssl/tls alert handshake failure:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:918:SSL alert number 40';
+    const api = classifyNetError(Object.assign(new Error(msg), { code: 'ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE' }), 'api-ssl', 8729);
+    expect(api.kind).toBe('tls');
+    expect(api.message).toMatch(/api-ssl provavelmente está sem certificado/);
+    const rest = classifyNetError(Object.assign(new Error('write EPROTO ' + msg), { code: 'EPROTO' }), 'rest', 443);
+    expect(rest.message).toMatch(/www-ssl/);
   });
 
   it('ordem de métodos prioriza TLS e só usa texto puro se liberado', () => {

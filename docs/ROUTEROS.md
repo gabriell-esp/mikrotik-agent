@@ -78,3 +78,24 @@ A central é cadastrada como equipamento com “Esta é a MikroTik central” ma
 ## Endereço de gerência
 
 Ao cadastrar a partir de um peer, o sistema sugere o primeiro IP `/32` do `allowed-address` do peer. Confirme se é o IP da MikroTik do cliente dentro do túnel. O servidor onde o backend roda precisa ter rota para essa rede (ex.: rota estática no servidor apontando para a central).
+
+## Solução de problemas
+
+### "SSL alert number 40" / "handshake failure" / "o roteador recusou a conexão TLS"
+
+O RouterOS recusou a negociação TLS. Na grande maioria das vezes, o serviço `api-ssl` (ou `www-ssl`) está habilitado **sem certificado**. Corrija na MikroTik:
+
+```routeros
+/certificate add name=slot1-api common-name=slot1-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
+/certificate sign slot1-api
+/ip service set api-ssl certificate=slot1-api disabled=no
+# opcional, para o REST (v7.1+):
+/ip service set www-ssl certificate=slot1-api disabled=no
+```
+
+Confira com `/ip service print detail where name~"ssl"`. O campo `certificate` deve mostrar `slot1-api`. A assinatura (`sign`) pode levar alguns segundos. Aguarde aparecer a flag `K` (chave privada) em `/certificate print` antes de testar.
+
+Se ainda falhar, verifique:
+- **Versão do TLS** (v7): o padrão aceita TLS 1.2. Não restrinja a uma versão mais antiga.
+- **Origem permitida:** o campo `address=` do serviço precisa incluir o IP do servidor. Se o IP não estiver liberado, o erro costuma ser de conexão recusada, não de TLS.
+- **Teste sem TLS, só dentro de rede confiável:** no cadastro do equipamento, marque "Permitir API sem criptografia" para confirmar que usuário e senha estão corretos pela porta 8728. Volte para a API-SSL depois de configurar o certificado.

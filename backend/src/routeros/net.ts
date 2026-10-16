@@ -41,6 +41,17 @@ export function classifyNetError(err: NodeJS.ErrnoException, method: RosMethod, 
     case 'EPIPE':
       return new RosError('tls', `Conexão encerrada pelo roteador durante a negociação (porta ${port}). Verifique certificado/serviço.`, method);
   }
+  // Alerta 40 (handshake failure) / "no shared cipher": o RouterOS recusou o TLS, normalmente
+  // porque o serviço está habilitado sem certificado atribuído.
+  if (/alert handshake failure|alert number 40|no shared cipher|sslv3 alert handshake/i.test(err.message)) {
+    const service = method === 'rest' ? 'www-ssl' : 'api-ssl';
+    return new RosError(
+      'tls',
+      `O roteador recusou a conexão TLS na porta ${port}: o serviço ${service} provavelmente está sem certificado. ` +
+        `Na MikroTik: crie e assine um certificado e use "/ip service set ${service} certificate=<nome>" (veja docs/ROUTEROS.md).`,
+      method,
+    );
+  }
   if (code.startsWith('ERR_SSL') || code.startsWith('ERR_TLS') || /ssl|tls|handshake|certificate/i.test(err.message)) {
     return new RosError('tls', `Falha TLS: ${err.message}`, method);
   }
