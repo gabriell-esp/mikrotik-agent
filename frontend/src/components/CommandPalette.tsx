@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Building2, CornerDownLeft, Network, Router, Search } from 'lucide-react';
+import { Building2, CornerDownLeft, Network, Router, Search, Wifi } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get } from '../lib/api';
@@ -45,6 +45,7 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
 
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => get('/devices'), enabled: open && can('devices.view') });
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients'), enabled: open && can('clients.view') });
+  const unifi = useQuery({ queryKey: ['unifi', 'controllers'], queryFn: () => get('/unifi/controllers'), enabled: open && can('unifi.view') });
   const ppp = useQuery({
     queryKey: ['palette-ppp', t],
     queryFn: () => get('/pppoe/secrets', { search: t, page_size: 10 }),
@@ -71,12 +72,19 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
       .filter((c: any) => [c.name, c.document, c.contact].join(' ').toLowerCase().includes(low))
       .slice(0, 5)
       .forEach((c: any) => out.push({ key: `c${c.id}`, group: 'Clientes', icon: <Building2 className="size-4" />, title: c.name, subtitle: `${c.devices} equipamento(s)`, to: `/equipamentos?cliente=${c.id}` }));
+    (unifi.data ?? [])
+      .filter((c: any) => [c.name, c.client_name, c.url].join(' ').toLowerCase().includes(low))
+      .slice(0, 5)
+      .forEach((c: any) => out.push({
+        key: `u${c.id}`, group: 'Controladoras UniFi', icon: <Wifi className="size-4" />, title: c.client_name ?? c.name,
+        subtitle: `${c.name} · ${c.summary.online}/${c.summary.devices} antenas · ${c.summary.clients} clientes`, extra: <DeviceStatusBadge status={c.status} />, to: `/unifi/${c.id}`,
+      }));
     (ppp.data?.rows ?? []).forEach((s: any) => out.push({
       key: `s${s.device_id}:${s.id}`, group: 'Usuários PPPoE', icon: <Network className="size-4" />, title: s.name,
       subtitle: [s.comment, s.device_name, s.client_name].filter(Boolean).join(' · '), to: `/pppoe/${s.device_id}?busca=${encodeURIComponent(s.name)}`,
     }));
     return out;
-  }, [t, pages, devices.data, clients.data, ppp.data]);
+  }, [t, pages, devices.data, clients.data, ppp.data, unifi.data]);
 
   useEffect(() => setActive(0), [t]);
 

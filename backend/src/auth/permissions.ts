@@ -22,6 +22,9 @@ export const PERMISSIONS = {
   'audit.view': 'Ver auditoria',
   'users.manage': 'Gerenciar usuários do sistema',
   'notifications.manage': 'Configurar notificações (WhatsApp)',
+  'unifi.view': 'Ver controladoras UniFi (antenas, clientes e redes Wi-Fi)',
+  'unifi.manage': 'Cadastrar/editar controladoras UniFi e credenciais',
+  'unifi.control': 'Controlar UniFi (reiniciar/atualizar antenas, clientes e redes Wi-Fi)',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -39,6 +42,7 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
     'dashboard.view', 'wireguard.view', 'wireguard.link', 'clients.view', 'devices.view',
     'monitor.view', 'monitor.firewall', 'logs.view',
     'pppoe.view', 'pppoe.create', 'pppoe.edit', 'pppoe.toggle', 'pppoe.disconnect',
+    'unifi.view', 'unifi.control',
   ],
   // Escritório: consulta para atendimento. Criação/edição/senha concedidas individualmente.
   escritorio: ['dashboard.view', 'clients.view', 'devices.view', 'pppoe.view'],

@@ -18,6 +18,10 @@ export const ACTION_LABEL: Record<string, string> = {
   'notifications.whatsapp.logout': 'WhatsApp desconectado', 'notifications.test': 'Mensagem de teste',
   'notifications.recipient.create': 'Destinatário criado', 'notifications.recipient.update': 'Destinatário alterado',
   'notifications.recipient.delete': 'Destinatário removido',
+  'unifi.controller.create': 'Controladora cadastrada', 'unifi.controller.update': 'Controladora alterada', 'unifi.controller.delete': 'Controladora excluída',
+  'unifi.device.restart': 'Antena reiniciada', 'unifi.device.upgrade': 'Firmware atualizado', 'unifi.device.locate': 'Localizar antena (LED)',
+  'unifi.device.unlocate': 'Parar de localizar antena', 'unifi.client.kick': 'Cliente Wi-Fi reconectado', 'unifi.client.block': 'Cliente Wi-Fi bloqueado',
+  'unifi.client.unblock': 'Cliente Wi-Fi desbloqueado', 'unifi.wlan.enable': 'Rede Wi-Fi ativada', 'unifi.wlan.disable': 'Rede Wi-Fi desativada',
 };
 
 const FIELD_LABEL: Record<string, string> = {
@@ -32,7 +36,7 @@ const fmtVal = (v: unknown) => (v === true ? 'sim' : v === false ? 'não' : v ==
 export const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 
 const tone = (a: string): 'red' | 'amber' | 'green' | 'blue' | 'slate' =>
-  a.endsWith('.delete') || a.endsWith('disconnect') ? 'red'
+  a.endsWith('.delete') || a.endsWith('disconnect') || a.endsWith('.block') || a.endsWith('.disable') || a.endsWith('.restart') ? 'red'
   : a.includes('password') ? 'amber'
   : a.endsWith('.create') || a.endsWith('.enable') ? 'green'
   : a.startsWith('auth.') ? 'slate'
@@ -56,7 +60,7 @@ function Details({ details }: { details: Record<string, any> | null }) {
 }
 
 /** Histórico de auditoria filtrado por escopo (um equipamento, sistema ou removidos). */
-export default function AuditLog({ deviceId, scope, showDevice }: { deviceId?: number; scope?: 'system' | 'removed'; showDevice?: boolean }) {
+export default function AuditLog({ deviceId, controllerId, scope, showDevice }: { deviceId?: number; controllerId?: number; scope?: 'system' | 'removed'; showDevice?: boolean }) {
   const [search, setSearch] = useState('');
   const [action, setAction] = useState('');
   const [from, setFrom] = useState('');
@@ -64,10 +68,10 @@ export default function AuditLog({ deviceId, scope, showDevice }: { deviceId?: n
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<any>(null);
   useEffect(() => setPage(1), [search, action, from, to]);
-  const base = { device_id: deviceId, scope };
-  const actions = useQuery({ queryKey: ['audit-actions', deviceId, scope], queryFn: () => get('/audit/actions', base) });
+  const base = { device_id: deviceId, controller_id: controllerId, scope };
+  const actions = useQuery({ queryKey: ['audit-actions', deviceId, controllerId, scope], queryFn: () => get('/audit/actions', base) });
   const q = useQuery({
-    queryKey: ['audit', deviceId, scope, search, action, from, to, page],
+    queryKey: ['audit', deviceId, controllerId, scope, search, action, from, to, page],
     queryFn: () => get('/audit', {
       ...base, search, action, page, page_size: 50,
       from: from ? new Date(from).toISOString() : undefined,

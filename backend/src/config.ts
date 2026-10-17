@@ -51,6 +51,7 @@ export const config = {
   },
   pollIntervalSec: int('POLL_INTERVAL_SEC', 60),
   wgPollIntervalSec: int('WG_POLL_INTERVAL_SEC', 60),
+  unifiPollIntervalSec: int('UNIFI_POLL_INTERVAL_SEC', 60),
   cacheTtlSec: int('CACHE_TTL_SEC', 60),
   /** Handshake mais antigo que isso = peer "sem handshake recente". */
   wgHandshakeStaleSec: int('WG_HANDSHAKE_STALE_SEC', 180),

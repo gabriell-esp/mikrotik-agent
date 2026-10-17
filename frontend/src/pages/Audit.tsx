@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { ArrowRight, Archive, Eye, Router, Settings2, ShieldAlert, type LucideIcon } from 'lucide-react';
+import { ArrowRight, Archive, Eye, Router, Settings2, ShieldAlert, Wifi, type LucideIcon } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { actionLabel } from '../components/AuditLog';
@@ -86,6 +86,28 @@ export default function AuditPage() {
               <SearchBox value={search} onChange={setSearch} placeholder="Buscar cliente ou equipamento…" className="w-full sm:w-72" />
             </div>
           </div>
+
+          {(q.data.controllers?.length ?? 0) > 0 && (
+            <>
+              <h2 className="flex items-center gap-2 pt-2 text-sm font-semibold text-slate-700"><Wifi className="size-4 text-slate-400" /> Controladoras UniFi ({q.data.controllers.length})</h2>
+              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+                {q.data.controllers
+                  .filter((c: any) => (!onlyActive || c.total > 0) && (!search || [c.device_name, c.client_name, c.host].join(' ').toLowerCase().includes(search.toLowerCase())))
+                  .map((c: any) => (
+                    <AuditCard
+                      key={`u${c.controller_id}`}
+                      to={`/auditoria/unifi-${c.controller_id}`}
+                      icon={Wifi}
+                      iconTone="bg-sky-50 text-sky-600"
+                      title={c.client_name ?? c.device_name}
+                      subtitle={<>{c.client_name ? `${c.device_name} · ` : ''}<span className="mono">{String(c.host).replace(/^https?:\/\//, '')}</span></>}
+                      badge={<DeviceStatusBadge status={c.status} />}
+                      s={c}
+                    />
+                  ))}
+              </div>
+            </>
+          )}
 
           {list.length === 0 ? (
             <div className="rounded-xl border border-slate-200/80 bg-white"><Empty>Nenhum equipamento encontrado.</Empty></div>

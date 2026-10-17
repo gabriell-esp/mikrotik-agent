@@ -13,6 +13,8 @@ import LoginPage from './pages/Login';
 import NotificationsPage from './pages/Notifications';
 import PppoePage from './pages/Pppoe';
 import PppoeDevicePage from './pages/PppoeDevice';
+import UnifiPage from './pages/Unifi';
+import UnifiControllerPage from './pages/UnifiController';
 import UsersPage from './pages/Users';
 import WireguardPage from './pages/Wireguard';
 
@@ -35,6 +37,8 @@ export default function App() {
         {can('clients.view') && <Route path="clientes" element={<ClientsPage />} />}
         <Route path="equipamentos" element={<DevicesPage />} />
         <Route path="equipamentos/:id" element={<DeviceDetailPage />} />
+        {can('unifi.view') && <Route path="unifi" element={<UnifiPage />} />}
+        {can('unifi.view') && <Route path="unifi/:id" element={<UnifiControllerPage />} />}
         {can('pppoe.view') && <Route path="pppoe" element={<PppoePage />} />}
         {can('pppoe.view') && <Route path="pppoe/:id" element={<PppoeDevicePage />} />}
         {can('audit.view') && <Route path="auditoria" element={<AuditPage />} />}

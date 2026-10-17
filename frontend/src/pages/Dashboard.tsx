@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, KeyRound, Router, ShieldAlert, Waypoints, WifiOff } from 'lucide-react';
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, KeyRound, Router, ShieldAlert, Waypoints, Wifi, WifiOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import DeviceList from '../components/DeviceList';
@@ -56,6 +56,32 @@ export default function DashboardPage() {
         <StatCard label="Autenticação / erro" value={c.auth_failed + c.error} icon={KeyRound} tone={c.auth_failed + c.error ? 'amber' : 'slate'} foot={`${c.auth_failed} credencial · ${c.error} comunicação`} />
       </div>
 
+      {d.unifi && d.unifi.controllers > 0 && (
+        <Link to="/unifi" className="group flex flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition hover:border-brand-300 sm:flex-row sm:items-center sm:rounded-xl sm:p-5">
+          <div className="flex items-center gap-3 sm:w-56">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600"><Wifi className="size-5" /></div>
+            <div>
+              <div className="font-semibold text-slate-900">UniFi</div>
+              <div className="text-xs text-slate-500">{d.unifi.online} de {d.unifi.controllers} controladora(s) acessível(is)</div>
+            </div>
+          </div>
+          <div className="grid flex-1 grid-cols-4 divide-x divide-slate-100 rounded-xl bg-slate-50 py-2.5">
+            {[
+              { l: 'Antenas on', v: d.unifi.devices_online, c: 'text-emerald-600' },
+              { l: 'Offline', v: d.unifi.devices_offline, c: d.unifi.devices_offline ? 'text-red-600' : 'text-slate-900' },
+              { l: 'Clientes', v: d.unifi.clients, c: 'text-slate-900' },
+              { l: 'Atualizar', v: d.unifi.upgradable, c: d.unifi.upgradable ? 'text-brand-600' : 'text-slate-900' },
+            ].map((m) => (
+              <div key={m.l} className="text-center">
+                <div className={clsx('text-lg font-semibold tabular-nums', m.c)}>{m.v}</div>
+                <div className="truncate text-[11px] text-slate-500">{m.l}</div>
+              </div>
+            ))}
+          </div>
+          <ArrowRight className="hidden size-4 text-brand-600 opacity-0 transition group-hover:opacity-100 sm:block" />
+        </Link>
+      )}
+
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         <Card title="Disponibilidade de gerência" icon={Activity} subtitle="Resultado real da conexão à API de cada equipamento">
           <SegmentBar
@@ -103,8 +129,8 @@ export default function DashboardPage() {
               {d.alerts.map((a: any, i: number) => (
                 <li key={i}>
                   <button
-                    disabled={!a.device_id}
-                    onClick={() => a.device_id && nav(`/equipamentos/${a.device_id}`)}
+                    disabled={!a.device_id && !a.unifi_id}
+                    onClick={() => (a.device_id ? nav(`/equipamentos/${a.device_id}`) : a.unifi_id && nav(`/unifi/${a.unifi_id}`))}
                     className="flex w-full items-start gap-3 px-5 py-3 text-left text-sm hover:bg-slate-50 disabled:hover:bg-transparent"
                   >
                     <span className={clsx('mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md', a.level === 'error' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600')}>

@@ -16,6 +16,7 @@ Navegador ──HTTPS──▶ Nginx (servidor) ──▶ web (Nginx + SPA React
 - **Coleta a cada 60 s + cache.** Se um equipamento cair, o sistema mostra a última coleta, marcada como desatualizada.
 - **Interface atualizada sozinha a cada 60 s, sem recarregar a tela:** só os dados visíveis são trocados, e o indicador “Atualizado às HH:MM:SS” na barra superior mostra a última sincronização (clique nele para atualizar na hora).
 - **Alertas pelo WhatsApp** (WPPConnect): queda, retorno, falha de autenticação, recursos altos e túnel sem handshake.
+- **Controladoras UniFi** (Cloud Key Gen2 / UniFi OS e controlador clássico): antenas, clientes e redes Wi-Fi, com ações de reiniciar, localizar, atualizar firmware, reconectar/bloquear clientes e ativar/desativar redes. Detalhes em [docs/UNIFI.md](docs/UNIFI.md).
 - Detalhes de transporte, versões e preparação dos roteadores: [docs/ROUTEROS.md](docs/ROUTEROS.md).
 
 ## Estrutura
@@ -160,6 +161,9 @@ As permissões são verificadas no backend em cada endpoint, por **funcionalidad
 | Cadastrar equipamentos/credenciais, clientes | ✔ | concessão individual | — |
 | Usuários do sistema, auditoria | ✔ | — | — |
 | Notificações (WhatsApp) | ✔ | concessão individual | — |
+| UniFi: ver antenas, clientes e redes | ✔ | ✔ | concessão individual |
+| UniFi: controlar (reiniciar, firmware, bloquear, redes) | ✔ | ✔ | concessão individual |
+| UniFi: cadastrar controladoras e credenciais | ✔ | concessão individual | — |
 
 - Toda permissão pode ser concedida ou removida por usuário (exceto do administrador, que é sempre completo).
 - **Escopo:** “todos os clientes” ou uma lista de clientes. A MikroTik central só é visível para quem tem acesso a todos os clientes.

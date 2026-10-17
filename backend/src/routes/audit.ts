@@ -12,6 +12,7 @@ import { requirePerm } from '../auth/session.js';
  */
 const scopeSchema = z.object({
   device_id: z.coerce.number().int().optional(),
+  controller_id: z.coerce.number().int().optional(),
   scope: z.enum(['system', 'removed']).optional(),
 });
 
@@ -19,10 +20,13 @@ function scopeWhere(q: z.infer<typeof scopeSchema>, params: unknown[], where: st
   if (q.device_id) {
     params.push(q.device_id);
     where.push(`a.device_id = $${params.length}`);
+  } else if (q.controller_id) {
+    params.push(q.controller_id);
+    where.push(`a.unifi_controller_id = $${params.length}`);
   } else if (q.scope === 'system') {
-    where.push('a.device_id IS NULL AND a.device_name IS NULL');
+    where.push('a.device_id IS NULL AND a.unifi_controller_id IS NULL AND a.device_name IS NULL');
   } else if (q.scope === 'removed') {
-    where.push('a.device_id IS NULL AND a.device_name IS NOT NULL');
+    where.push('a.device_id IS NULL AND a.unifi_controller_id IS NULL AND a.device_name IS NOT NULL');
   }
 }
 
@@ -97,10 +101,19 @@ export async function auditRoutes(app: FastifyInstance) {
     );
     const lastOf = (w: string) =>
       `(SELECT row_to_json(x) FROM (SELECT l.action, l.username, l.at FROM audit_log l WHERE ${w.replaceAll('a.', 'l.')} ORDER BY l.at DESC LIMIT 1) x) AS last`;
-    const sysW = 'a.device_id IS NULL AND a.device_name IS NULL';
-    const remW = 'a.device_id IS NULL AND a.device_name IS NOT NULL';
+    const sysW = 'a.device_id IS NULL AND a.unifi_controller_id IS NULL AND a.device_name IS NULL';
+    const remW = 'a.device_id IS NULL AND a.unifi_controller_id IS NULL AND a.device_name IS NOT NULL';
     const system = await one(`SELECT ${stats}, ${lastOf(sysW)} FROM audit_log a WHERE ${sysW}`);
     const removed = await one(`SELECT ${stats}, count(DISTINCT a.device_name)::int AS devices, ${lastOf(remW)} FROM audit_log a WHERE ${remW}`);
-    return { system, removed, devices };
+    const controllers = await query(
+      `SELECT u.id AS controller_id, u.name AS device_name, u.url AS host, u.status, c.name AS client_name, ${stats},
+              (SELECT row_to_json(x) FROM (SELECT l.action, l.username, l.at FROM audit_log l WHERE l.unifi_controller_id = u.id ORDER BY l.at DESC LIMIT 1) x) AS last
+         FROM unifi_controllers u
+         LEFT JOIN clients c ON c.id = u.client_id
+         LEFT JOIN audit_log a ON a.unifi_controller_id = u.id
+        GROUP BY u.id, c.name
+        ORDER BY max(a.at) DESC NULLS LAST, c.name, u.name`,
+    );
+    return { system, removed, devices, controllers };
   });
 }

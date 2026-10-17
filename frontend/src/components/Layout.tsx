@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
   BellRing, Building2, ChevronDown, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
-  Users, Waypoints, X, type LucideIcon,
+  Users, Waypoints, Wifi, X, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     { to: '/', label: 'Dashboard', short: 'Início', icon: LayoutDashboard, perm: 'dashboard.view' },
     { to: '/wireguard', label: 'WireGuard', icon: Waypoints, perm: 'wireguard.view' },
     { to: '/equipamentos', label: 'Equipamentos', short: 'Equip.', icon: Router, perm: 'devices.view' },
+    { to: '/unifi', label: 'UniFi', icon: Wifi, perm: 'unifi.view' },
   ] },
   { title: 'Atendimento', items: [
     { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
@@ -73,7 +74,7 @@ export default function Layout() {
   );
   const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const bottomItems = useMemo(() => {
-    const prefer = ['/', '/equipamentos', '/pppoe', '/wireguard'];
+    const prefer = ['/', '/equipamentos', '/pppoe', '/unifi', '/wireguard'];
     return prefer.map((to) => allItems.find((i) => i.to === to)).filter(Boolean).slice(0, 4) as NavItem[];
   }, [allItems]);
   const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => (i.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(i.to)));

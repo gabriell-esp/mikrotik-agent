@@ -3,6 +3,7 @@ import { query, one } from '../db/pool.js';
 import { deviceScopeSql, hasPerm, requirePerm } from '../auth/session.js';
 import { collectorState } from '../services/collector.js';
 import { getCentral, peerState, WG_CACHE_MODULE } from '../services/wireguard.js';
+import { controllerSummary } from '../unifi/service.js';
 
 const STATUS_LABEL: Record<string, string> = {
   unreachable: 'inacessível',
@@ -61,10 +62,36 @@ export async function dashboardRoutes(app: FastifyInstance) {
       }
     }
 
+    let unifi = null;
+    if (hasPerm(user, 'unifi.view')) {
+      const up: unknown[] = [];
+      const scope = user.allClients ? 'TRUE' : (up.push(user.clientIds), `u.client_id = ANY($1::int[])`);
+      const ctrls = await query(`SELECT u.id, u.name, u.status, u.status_message, u.last_poll_at, c.name AS client_name FROM unifi_controllers u LEFT JOIN clients c ON c.id = u.client_id WHERE ${scope}`, up);
+      const totals = { controllers: ctrls.length, online: 0, problems: 0, devices: 0, devices_online: 0, devices_offline: 0, clients: 0, upgradable: 0 };
+      for (const c of ctrls) {
+        const sm = await controllerSummary(c.id);
+        if (c.status === 'online') totals.online++;
+        else if (c.status !== 'unknown') {
+          totals.problems++;
+          alerts.push({ level: 'error', message: `Controladora UniFi ${c.name}${c.client_name ? ` (${c.client_name})` : ''}: ${STATUS_LABEL[c.status] ?? c.status}${c.status_message ? ` — ${c.status_message}` : ''}`, at: c.last_poll_at, unifi_id: c.id } as any);
+        }
+        totals.devices += sm.devices;
+        totals.devices_online += sm.online;
+        totals.devices_offline += sm.offline;
+        totals.clients += sm.clients;
+        totals.upgradable += sm.upgradable;
+        if (c.status === 'online' && sm.offline > 0) {
+          alerts.push({ level: 'warning', message: `${c.client_name ?? c.name}: ${sm.offline} dispositivo(s) UniFi desconectado(s)`, unifi_id: c.id } as any);
+        }
+      }
+      unifi = totals;
+    }
+
     const lastPoll = devices.reduce<string | null>((acc, d) => (d.last_poll_at && (!acc || d.last_poll_at > acc) ? d.last_poll_at : acc), null);
     return {
       counts,
       wireguard,
+      unifi,
       alerts,
       lastDevicePollAt: lastPoll,
       collector: { lastDeviceRunAt: collectorState.lastDeviceRunAt, lastWgRunAt: collectorState.lastWgRunAt },
