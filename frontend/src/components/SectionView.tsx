@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { columnsFor, type Col } from '../lib/columns';
+import DataList from './DataList';
 import { fmtBytes, isTrue } from '../lib/format';
 import { Badge, Card, Empty, Notice, Pagination, SearchBox, usePaged } from './ui';
 
@@ -74,21 +75,22 @@ export function SectionTable({ module, section, pageSize = 25 }: { module: strin
       {filtered.length === 0 ? (
         <Empty>{rows.length ? 'Nada encontrado.' : 'Nenhum registro no equipamento.'}</Empty>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>{cols.map((c) => <th key={c.key}>{c.label}</th>)}</tr>
-            </thead>
-            <tbody>
-              {paged.slice.map((r, i) => (
-                <tr key={r['.id'] ?? i} className={isTrue(r.disabled) ? 'text-slate-400' : ''}>
-                  {cols.map((c) => <td key={c.key}><Cell col={c} value={r[c.key]} /></td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <>
+          <DataList
+            rows={paged.slice}
+            rowKey={(r, i) => r['.id'] ?? i}
+            rowClass={(r) => (isTrue(r.disabled) ? 'text-slate-400' : undefined)}
+            accent={(r) => (isTrue(r.disabled) ? 'slate' : r.running !== undefined ? (isTrue(r.running) ? 'green' : 'red') : undefined)}
+            cols={cols.map((c, i) => ({
+              key: c.key,
+              header: c.label,
+              cell: (r: Record<string, string>) => <Cell col={c} value={r[c.key]} />,
+              // Celular: 1ª coluna como título, até 8 campos e o comentário em bloco.
+              mobile: i === 0 ? 'title' : c.key === 'comment' ? 'full' : i > 8 ? 'hide' : 'field',
+            }))}
+          />
           <Pagination page={paged.page} pageSize={paged.pageSize} total={paged.total} onPage={paged.setPage} />
-        </div>
+        </>
       )}
     </Card>
   );

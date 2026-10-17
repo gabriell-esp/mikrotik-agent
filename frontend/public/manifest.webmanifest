@@ -1,0 +1,16 @@
+{
+  "name": "Slot1 · Gerência MikroTik",
+  "short_name": "Slot1 MikroTik",
+  "description": "Monitoramento e administração das MikroTiks dos clientes da Slot1 Informática.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

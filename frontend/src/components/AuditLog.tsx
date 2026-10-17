@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { get } from '../lib/api';
+import DataList from './DataList';
 import { fmtDateTime } from '../lib/format';
 import { Badge, Card, Empty, ErrorBox, Field, Input, Modal, Pagination, SearchBox, Select, TableSkeleton } from './ui';
 
@@ -78,8 +79,8 @@ export default function AuditLog({ deviceId, scope, showDevice }: { deviceId?: n
   return (
     <div className="space-y-4">
       <Card>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Busca"><SearchBox value={search} onChange={setSearch} placeholder="Usuário ou alvo (ex.: apto, login)" /></Field>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <Field label="Busca" className="col-span-2 lg:col-span-1"><SearchBox value={search} onChange={setSearch} placeholder="Usuário ou alvo (ex.: apto, login)" /></Field>
           <Field label="Ação">
             <Select value={action} onChange={(e) => setAction(e.target.value)}>
               <option value="">Todas</option>
@@ -92,32 +93,34 @@ export default function AuditLog({ deviceId, scope, showDevice }: { deviceId?: n
       </Card>
       <Card bodyClass="" title={q.data ? `${q.data.total} registro(s)` : 'Registros'} subtitle="Senhas nunca são registradas.">
         {q.isLoading ? <TableSkeleton cols={5} /> : q.error ? <div className="p-4"><ErrorBox error={q.error} /></div> : !q.data.rows.length ? <Empty>Nenhum registro.</Empty> : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr><th>Quando</th><th>Usuário</th><th>Ação</th>{showDevice && <th>Equipamento</th>}<th>Alvo</th><th>Detalhes</th><th>IP</th></tr>
-              </thead>
-              <tbody>
-                {q.data.rows.map((r: any) => (
-                  <tr key={r.id} className="cursor-pointer" onClick={() => setOpen(r)}>
-                    <td className="whitespace-nowrap text-xs">{fmtDateTime(r.at)}</td>
-                    <td className="font-medium text-slate-800">{r.username ?? '—'}</td>
-                    <td>
-                      <div className="flex flex-wrap items-center gap-1">
-                        <Badge color={tone(r.action)}>{actionLabel(r.action)}</Badge>
-                        {!r.success && <Badge color="red" dot>falhou</Badge>}
-                      </div>
-                    </td>
-                    {showDevice && <td className="text-xs">{r.device_name ?? '—'}{r.client_name && <div className="text-slate-500">{r.client_name}</div>}</td>}
-                    <td className="text-xs">{r.target ?? '—'}</td>
-                    <td className="min-w-[260px] max-w-md"><Details details={r.details} /></td>
-                    <td className="mono text-slate-500">{r.ip}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <DataList
+              rows={q.data.rows}
+              rowKey={(r: any) => r.id}
+              onRowClick={setOpen}
+              accent={(r: any) => (!r.success ? 'red' : ({ red: 'red', amber: 'amber', green: 'green', blue: 'blue', slate: 'slate' } as const)[tone(r.action)])}
+              cols={[
+                { key: 'at', header: 'Quando', mobile: 'subtitle', td: 'whitespace-nowrap text-xs', cell: (r: any) => <span className="text-xs">{fmtDateTime(r.at)} <span className="md:hidden">· {r.username ?? '—'}</span></span> },
+                { key: 'user', header: 'Usuário', mobile: 'hide', cell: (r: any) => <span className="font-medium text-slate-800">{r.username ?? '—'}</span> },
+                {
+                  key: 'action', header: 'Ação', mobile: 'title',
+                  cell: (r: any) => (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge color={tone(r.action)}>{actionLabel(r.action)}</Badge>
+                      {!r.success && <Badge color="red" dot>falhou</Badge>}
+                      {r.target && <span className="text-sm font-medium text-slate-800 md:hidden">{r.target}</span>}
+                    </div>
+                  ),
+                },
+                ...(showDevice ? [{ key: 'device', header: 'Equipamento', cell: (r: any) => <span className="text-xs">{r.device_name ?? '—'}{r.client_name && <span className="block text-slate-500">{r.client_name}</span>}</span> }] : []),
+                { key: 'target', header: 'Alvo', mobile: 'hide', td: 'text-xs', cell: (r: any) => r.target ?? '—' },
+                { key: 'details', header: 'Detalhes', mobile: 'full', label: '', td: 'min-w-[260px] max-w-md', cell: (r: any) => (r.details ? <Details details={r.details} /> : null) },
+                { key: 'ip', header: 'IP', mobile: 'hide', cell: (r: any) => <span className="mono text-slate-500">{r.ip}</span> },
+              ]}
+            />
+
             <Pagination page={q.data.page} pageSize={q.data.page_size} total={q.data.total} onPage={setPage} />
-          </div>
+          </>
         )}
       </Card>
       <Modal open={!!open} onClose={() => setOpen(null)} title={open ? actionLabel(open.action) : ''} description={open && `${fmtDateTime(open.at)} · ${open.username ?? '—'} · IP ${open.ip ?? '—'}`}>

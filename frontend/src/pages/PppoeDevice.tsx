@@ -32,7 +32,7 @@ export default function PppoeDevicePage() {
             <DeviceStatusBadge status={d.status} title={d.status_message} />
           </span>
         }
-        actions={<Link to={`/equipamentos/${d.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50"><ExternalLink className="size-4" /> Ver equipamento</Link>}
+        actions={<Link to={`/equipamentos/${d.id}`} className="inline-flex h-11 w-full items-center justify-center sm:h-9 sm:w-auto gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50"><ExternalLink className="size-4" /> Ver equipamento</Link>}
       />
 
       {d.status !== 'online' && d.status !== 'unknown' && (
@@ -42,7 +42,23 @@ export default function PppoeDevicePage() {
       )}
 
       {s && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-4 divide-x divide-slate-100 rounded-2xl border border-slate-200/80 bg-white py-3 shadow-xs sm:hidden">
+          {[
+            { l: 'Usuários', v: s.secrets_total, c: 'text-slate-900' },
+            { l: 'Online', v: s.online, c: 'text-emerald-600' },
+            { l: 'Offline', v: s.offline, c: s.offline ? 'text-amber-600' : 'text-slate-900' },
+            { l: 'Bloqueados', v: s.secrets_disabled, c: s.secrets_disabled ? 'text-red-600' : 'text-slate-900' },
+          ].map((m) => (
+            <div key={m.l} className="text-center">
+              <div className={`text-xl font-semibold tabular-nums ${m.c}`}>{m.v}</div>
+              <div className="text-[11px] text-slate-500">{m.l}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {s && (
+        <div className="hidden grid-cols-2 gap-4 sm:grid lg:grid-cols-4">
           <StatCard label="Usuários cadastrados" value={s.secrets_total} icon={Users} tone="blue" foot={s.servers.length ? `Servidor PPPoE em ${s.servers.join(', ')}` : 'Nenhum servidor PPPoE ativo'} />
           <StatCard label="Online agora" value={s.online} icon={UserCheck} tone="green" foot="sessões ativas" />
           <StatCard label="Habilitados offline" value={s.offline} icon={WifiOff} tone={s.offline ? 'amber' : 'slate'} foot="sem sessão no momento" />

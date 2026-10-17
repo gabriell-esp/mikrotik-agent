@@ -19,7 +19,7 @@ export function Button({ variant = 'secondary', size = 'md', loading, className,
       disabled={disabled || loading}
       className={clsx(
         'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
-        size === 'sm' ? 'h-8 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
+        size === 'sm' ? 'h-9 px-3 text-xs sm:h-8 sm:px-2.5' : 'h-11 px-4 text-[15px] sm:h-9 sm:px-3.5 sm:text-sm',
         {
           primary: 'bg-brand-600 text-white shadow-sm shadow-brand-600/20 hover:bg-brand-700',
           secondary: 'border border-slate-200 bg-white text-slate-700 shadow-xs hover:border-slate-300 hover:bg-slate-50',
@@ -44,18 +44,18 @@ export function IconButton({ icon: Icon, label, tone, className, ...rest }: Butt
       title={label}
       aria-label={label}
       className={clsx(
-        'inline-flex size-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
+        'inline-flex size-10 items-center justify-center rounded-lg text-slate-400 sm:size-8 transition-colors hover:bg-slate-100 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
         tone ? { danger: 'hover:bg-red-50 hover:text-red-600', success: 'hover:bg-emerald-50 hover:text-emerald-600', warning: 'hover:bg-amber-50 hover:text-amber-600' }[tone] : 'hover:text-slate-700',
         className,
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-[18px] sm:size-4" />
     </button>
   );
 }
 
 const inputCls =
-  'h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-xs placeholder:text-slate-400 transition focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-500/15 disabled:bg-slate-50 disabled:text-slate-500';
+  'h-11 rounded-lg border border-slate-200 bg-white px-3 text-base text-slate-800 sm:h-9 sm:text-sm shadow-xs placeholder:text-slate-400 transition focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-500/15 disabled:bg-slate-50 disabled:text-slate-500';
 
 /** Largura total por padrão, a menos que o chamador defina uma classe w-*. */
 const widthCls = (cls?: string) => clsx(inputCls, !/(^|\s)w-/.test(cls ?? '') && 'w-full', cls);
@@ -82,7 +82,7 @@ export function Field({ label, hint, error, children, className }: { label: stri
 export function Checkbox({ label, checked, onChange, disabled }: { label: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className={clsx('flex cursor-pointer items-start gap-2.5 text-sm text-slate-700', disabled && 'cursor-not-allowed opacity-50')}>
-      <input type="checkbox" className="mt-0.5 size-4 shrink-0 rounded border-slate-300 accent-brand-600" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" className="mt-0.5 size-5 shrink-0 rounded border-slate-300 accent-brand-600 sm:size-4" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span>{label}</span>
     </label>
   );
@@ -112,9 +112,9 @@ export function Card({ title, subtitle, actions, children, className, bodyClass,
   title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClass?: string; icon?: LucideIcon;
 }) {
   return (
-    <section className={clsx('rounded-xl border border-slate-200/80 bg-white shadow-xs', className)}>
+    <section className={clsx('overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs sm:rounded-xl', className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
           <div className="flex min-w-0 items-center gap-2.5">
             {Icon && <Icon className="size-4 shrink-0 text-slate-400" />}
             <div className="min-w-0">
@@ -125,7 +125,7 @@ export function Card({ title, subtitle, actions, children, className, bodyClass,
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>
         </header>
       )}
-      <div className={clsx(bodyClass ?? 'p-5')}>{children}</div>
+      <div className={clsx(bodyClass ?? 'p-4 sm:p-5')}>{children}</div>
     </section>
   );
 }
@@ -287,13 +287,13 @@ export function StatCard({ label, value, icon: Icon, tone = 'blue', hint, foot }
   label: string; value: ReactNode; icon: LucideIcon; tone?: Tone; hint?: string; foot?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs sm:p-5" title={hint}>
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-xl sm:p-5" title={hint}>
       <div className="flex items-start justify-between gap-3">
-        <div className="text-[13px] font-medium text-slate-500">{label}</div>
-        <div className={clsx('flex size-9 items-center justify-center rounded-lg', TONE[tone])}><Icon className="size-[18px]" /></div>
+        <div className="text-xs leading-snug font-medium text-slate-500 sm:text-[13px]">{label}</div>
+        <div className={clsx('flex size-8 shrink-0 items-center justify-center rounded-lg sm:size-9', TONE[tone])}><Icon className="size-4 sm:size-[18px]" /></div>
       </div>
       <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums sm:text-3xl">{value}</div>
-      {foot && <div className="mt-1 text-xs text-slate-500">{foot}</div>}
+      {foot && <div className="mt-1 line-clamp-2 text-[11px] text-slate-500 sm:text-xs">{foot}</div>}
     </div>
   );
 }
@@ -335,8 +335,8 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
   const pages = Math.max(1, Math.ceil(total / pageSize));
   if (total === 0) return null;
   return (
-    <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
-      <span>
+    <div className="flex flex-row-reverse items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500 sm:flex-row sm:px-5 sm:py-2.5">
+      <span className="hidden sm:inline">
         Mostrando <b className="font-medium text-slate-700">{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}</b> de <b className="font-medium text-slate-700">{total}</b>
       </span>
       {pages > 1 && (
@@ -346,6 +346,7 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
           <IconButton icon={ChevronRight} label="Próxima página" disabled={page >= pages} onClick={() => onPage(page + 1)} />
         </div>
       )}
+      <span className="sm:hidden">{total} itens</span>
     </div>
   );
 }
@@ -375,18 +376,19 @@ export function Modal({ open, onClose, title, description, children, footer, wid
       <div
         role="dialog"
         aria-modal="true"
-        className={clsx('flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:rounded-2xl', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
+        className={clsx('flex max-h-[92dvh] w-full flex-col rounded-t-3xl bg-white shadow-2xl ring-1 ring-slate-900/5 sm:rounded-2xl', wide ? 'sm:max-w-3xl' : 'sm:max-w-lg')}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 px-6 pt-5 pb-3">
+        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-slate-200 sm:hidden" aria-hidden />
+        <header className="flex items-start justify-between gap-4 px-5 pt-3 pb-3 sm:px-6 sm:pt-5">
           <div>
             <h3 className="text-base font-semibold text-slate-900">{title}</h3>
             {description && <p className="mt-0.5 text-sm text-slate-500">{description}</p>}
           </div>
           <IconButton icon={X} label="Fechar" onClick={onClose} className="-mr-2" />
         </header>
-        <div className="overflow-y-auto px-6 pb-5">{children}</div>
-        {footer && <footer className="flex flex-wrap justify-end gap-2 rounded-b-2xl border-t border-slate-100 bg-slate-50/60 px-6 py-3.5">{footer}</footer>}
+        <div className="overflow-y-auto overscroll-contain px-5 pb-5 sm:px-6">{children}</div>
+        {footer && <footer className="flex flex-wrap justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:rounded-b-2xl sm:px-6 sm:py-3.5 [&>button]:flex-1 sm:[&>button]:flex-none">{footer}</footer>}
       </div>
     </div>
   );
@@ -429,13 +431,13 @@ export function ConfirmDialog({
 
 export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: ReactNode }[]; active: string; onChange: (k: string) => void }) {
   return (
-    <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-slate-200 px-1 [scrollbar-width:none]">
+    <div className="-mx-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
       {tabs.map((t) => (
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
           className={clsx(
-            '-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
+            '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:py-2.5',
             active === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
           )}
         >
@@ -448,13 +450,13 @@ export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: R
 
 export function PageHeader({ title, subtitle, actions, breadcrumb }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; breadcrumb?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 sm:mb-6 sm:gap-4">
       <div className="min-w-0">
         {breadcrumb && <div className="mb-1.5 text-xs font-medium text-slate-500">{breadcrumb}</div>}
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
+        <h1 className="text-[22px] leading-tight font-semibold tracking-tight text-slate-900 sm:text-2xl">{title}</h1>
         {subtitle && <div className="mt-1 text-sm text-slate-500">{subtitle}</div>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {actions && <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">{actions}</div>}
     </div>
   );
 }
@@ -474,7 +476,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="fixed right-4 bottom-4 z-[60] flex w-[min(92vw,380px)] flex-col gap-2">
+      <div className="fixed inset-x-3 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col gap-2 sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[380px] lg:bottom-4">
         {items.map((t) => (
           <div key={t.id} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-3.5 text-sm text-slate-700 shadow-lg">
             {t.kind === 'error' ? <XCircle className="size-5 shrink-0 text-red-500" /> : <CheckCircle2 className="size-5 shrink-0 text-emerald-500" />}

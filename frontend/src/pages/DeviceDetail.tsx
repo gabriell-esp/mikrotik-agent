@@ -3,7 +3,9 @@ import clsx from 'clsx';
 import { Activity, Pencil, RefreshCw, ScrollText, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import DataList from '../components/DataList';
 import DeviceForm from '../components/DeviceForm';
+import RowActions from '../components/RowActions';
 import { ActiveSessions, SecretsList } from '../components/Pppoe';
 import { KeyValue, SectionTable, type Section } from '../components/SectionView';
 import { IconButton,
@@ -123,23 +125,27 @@ function TrafficMonitor({ deviceId, interfaces }: { deviceId: number; interfaces
   return (
     <Card
       title={<span className="flex items-center gap-2"><Activity className="size-4" /> Tráfego em tempo real</span>}
-      actions={<Button variant={running ? 'danger' : 'primary'} onClick={() => setRunning((v) => !v)} disabled={!selected.length}>{running ? 'Parar' : 'Iniciar (a cada 3 s)'}</Button>}
+      actions={<Button variant={running ? 'danger' : 'primary'} className="w-full sm:w-auto" onClick={() => setRunning((v) => !v)} disabled={!selected.length}>{running ? 'Parar' : 'Iniciar (a cada 3 s)'}</Button>}
     >
-      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1">
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-2.5">
         {interfaces.map((n) => (
           <Checkbox key={n} label={n} checked={selected.includes(n)} onChange={(v) => setSelected((s) => (v ? [...s, n].slice(0, 12) : s.filter((x) => x !== n)))} />
         ))}
       </div>
       {q.error && <ErrorBox error={q.error} />}
       {running && q.data && (
-        <table className="tbl">
-          <thead><tr><th>Interface</th><th>Download (rx)</th><th>Upload (tx)</th><th>Pacotes rx/tx</th></tr></thead>
-          <tbody>
-            {q.data.rows.map((r: any) => (
-              <tr key={r.name}><td className="font-medium">{r.name}</td><td className="tabular-nums">{fmtBps(r.rxBps)}</td><td className="tabular-nums">{fmtBps(r.txBps)}</td><td className="text-xs">{r.rxPps} / {r.txPps}</td></tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="-mx-4 border-t border-slate-100 sm:-mx-5">
+          <DataList
+            rows={q.data.rows}
+            rowKey={(r: any) => r.name}
+            cols={[
+              { key: 'name', header: 'Interface', cell: (r: any) => <span className="font-medium">{r.name}</span> },
+              { key: 'rx', header: 'Download (rx)', label: '↓ Download', cell: (r: any) => <span className="font-semibold text-slate-800 tabular-nums">{fmtBps(r.rxBps)}</span> },
+              { key: 'tx', header: 'Upload (tx)', label: '↑ Upload', cell: (r: any) => <span className="font-semibold text-slate-800 tabular-nums">{fmtBps(r.txBps)}</span> },
+              { key: 'pps', header: 'Pacotes rx/tx', mobile: 'hide', cell: (r: any) => <span className="text-xs">{r.rxPps} / {r.txPps}</span> },
+            ]}
+          />
+        </div>
       )}
       {running && q.data && <div className="mt-2 text-xs text-slate-500">Leitura de {fmtDateTime(q.data.collectedAt)}</div>}
     </Card>
@@ -179,10 +185,10 @@ function LogsTab({ deviceId }: { deviceId: number }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {q.data && <Freshness collectedAt={q.data.collectedAt} stale={q.data.stale} error={q.data.error} />}
-        <Button onClick={() => setNonce((n) => n + 1)} loading={q.isPlaceholderData}><RefreshCw className="size-4" /> Consultar agora</Button>
+        <Button className="w-full sm:w-auto" onClick={() => setNonce((n) => n + 1)} loading={q.isPlaceholderData}><RefreshCw className="size-4" /> Consultar agora</Button>
       </div>
       <Card>
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Field label="Tópico">
             <Select value={topic} onChange={(e) => setTopic(e.target.value)}>
               <option value="">Todos</option>
@@ -201,21 +207,23 @@ function LogsTab({ deviceId }: { deviceId: number }) {
       {q.isLoading ? <Spinner /> : q.error ? <ErrorBox error={q.error} /> : q.data && !q.data.available ? <Notice>Logs indisponíveis: {q.data.reason}</Notice> : (
         <Card bodyClass="" title={`${rows.length} linhas`}>
           {rows.length === 0 ? <Empty>Nenhuma linha com esses filtros.</Empty> : (
-            <div className="overflow-x-auto">
-              <table className="tbl">
-                <thead><tr><th>Horário</th><th>Tópicos</th><th>Mensagem</th></tr></thead>
-                <tbody>
-                  {paged.slice.map((r: any, i: number) => (
-                    <tr key={r.id ?? i} className={clsx(r.topics.some((t: string) => ['error', 'critical'].includes(t)) && 'bg-red-50/60', r.topics.includes('warning') && 'bg-amber-50/60')}>
-                      <td className="mono whitespace-nowrap">{r.ts ?? r.time}</td>
-                      <td className="whitespace-nowrap text-xs">{r.topics.join(', ')}</td>
-                      <td className="mono break-all">{r.message}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <>
+              <DataList
+                rows={paged.slice}
+                rowKey={(r: any, i) => r.id ?? i}
+                rowClass={(r: any) => clsx(r.topics.some((t: string) => ['error', 'critical'].includes(t)) && 'bg-red-50/60', r.topics.includes('warning') && 'bg-amber-50/60')}
+                accent={(r: any) => (r.topics.some((t: string) => ['error', 'critical'].includes(t)) ? 'red' : r.topics.includes('warning') ? 'amber' : undefined)}
+                cols={[
+                  { key: 'time', header: 'Horário', mobile: 'subtitle', td: 'mono whitespace-nowrap', cell: (r: any) => <span className="mono">{r.ts ?? r.time}</span> },
+                  {
+                    key: 'topics', header: 'Tópicos', mobile: 'badges', td: 'whitespace-nowrap text-xs',
+                    cell: (r: any) => <><span className="md:hidden">{r.topics.map((t: string) => <Badge key={t}>{t}</Badge>)}</span><span className="max-md:hidden">{r.topics.join(', ')}</span></>,
+                  },
+                  { key: 'msg', header: 'Mensagem', mobile: 'title', td: 'mono break-all', cell: (r: any) => <span className="mono break-all text-slate-800 max-md:text-[13px] max-md:font-normal">{r.message}</span> },
+                ]}
+              />
               <Pagination page={paged.page} pageSize={paged.pageSize} total={paged.total} onPage={paged.setPage} />
-            </div>
+            </>
           )}
         </Card>
       )}
@@ -296,11 +304,23 @@ export default function DeviceDetailPage() {
             <span className="mono">{d.host}</span>
             <span>{d.ros_version ? `RouterOS ${d.ros_version}` : 'versão não coletada'}</span>
             {d.board_name && <span>{d.board_name}</span>}
-            <span>acesso: {d.detected_method ?? d.api_method}</span>
+            <span className="max-sm:hidden">acesso: {d.detected_method ?? d.api_method}</span>
           </span>
         }
         actions={
           <>
+            <div className="flex w-full items-center gap-2 sm:hidden">
+              <Button className="flex-1" onClick={() => check.mutate()} loading={check.isPending}><RefreshCw className="size-4" /> Verificar agora</Button>
+              <RowActions
+                title={d.name}
+                actions={[
+                  { icon: ScrollText, label: 'Auditoria', onClick: () => nav(`/auditoria/${d.id}`), show: can('audit.view') },
+                  { icon: Pencil, label: 'Editar', onClick: () => setEditing({ ...d }), show: can('devices.manage') },
+                  { icon: Trash2, label: 'Excluir', tone: 'danger', onClick: () => setRemoving(true), show: can('devices.manage') },
+                ]}
+              />
+            </div>
+            <div className="hidden flex-wrap items-center gap-2 sm:flex">
             <Button onClick={() => check.mutate()} loading={check.isPending}><RefreshCw className="size-4" /> Verificar agora</Button>
             {can('audit.view') && (
               <Link to={`/auditoria/${d.id}`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-xs hover:bg-slate-50">
@@ -309,28 +329,29 @@ export default function DeviceDetailPage() {
             )}
             {can('devices.manage') && <Button onClick={() => setEditing({ ...d })}><Pencil className="size-4" /> Editar</Button>}
             {can('devices.manage') && <IconButton icon={Trash2} label="Excluir" tone="danger" onClick={() => setRemoving(true)} />}
+            </div>
           </>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-xl sm:p-4">
           <div className="text-xs text-slate-500">Gerência (API/REST)</div>
           <div className="mt-1"><DeviceStatusBadge status={d.status} /></div>
           {d.status_message && <div className="mt-1 break-words text-xs text-slate-500">{d.status_message}</div>}
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-xl sm:p-4">
           <div className="text-xs text-slate-500">Túnel WireGuard (visto pela central)</div>
           <div className="mt-1"><PeerStateBadge state={d.peer_state} /></div>
           {d.peer_id && <div className="mt-1 text-xs text-slate-500">{d.peer_last_handshake_seconds == null ? 'sem handshake' : `handshake há ${fmtDuration(d.peer_last_handshake_seconds + (Date.now() - new Date(d.peer_collected_at).getTime()) / 1000)}`}{!d.peer_present && ' · peer removido da central'}</div>}
           {!d.peer_id && can('wireguard.link') && <Link to="/wireguard" className="text-xs text-brand-700 hover:underline">vincular peer</Link>}
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-xl sm:p-4">
           <div className="text-xs text-slate-500">Última resposta</div>
           <div className="mt-1 text-sm font-medium"><TimeAgo date={d.last_ok_at} /></div>
           <div className="text-xs text-slate-500">{fmtDateTime(d.last_ok_at)}</div>
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-xs">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:rounded-xl sm:p-4">
           <div className="text-xs text-slate-500">Última tentativa</div>
           <div className="mt-1 text-sm font-medium"><TimeAgo date={d.last_poll_at} /></div>
           <div className="text-xs text-slate-500">{d.poll_enabled ? 'coleta periódica ativa' : 'coleta periódica desativada'}</div>
@@ -351,14 +372,15 @@ export default function DeviceDetailPage() {
 
       {d.events?.length > 0 && (
         <Card title="Histórico de status de gerência" bodyClass="">
-          <table className="tbl">
-            <thead><tr><th>Quando</th><th>Status</th><th>Detalhe</th></tr></thead>
-            <tbody>
-              {d.events.map((e: any, i: number) => (
-                <tr key={i}><td className="whitespace-nowrap text-xs">{fmtDateTime(e.at)}</td><td><DeviceStatusBadge status={e.status} /></td><td className="break-words text-xs">{e.message}</td></tr>
-              ))}
-            </tbody>
-          </table>
+          <DataList
+            rows={d.events}
+            rowKey={(_: any, i) => i}
+            cols={[
+              { key: 'status', header: 'Status', mobile: 'title', cell: (e: any) => <DeviceStatusBadge status={e.status} /> },
+              { key: 'at', header: 'Quando', mobile: 'subtitle', td: 'whitespace-nowrap text-xs', cell: (e: any) => fmtDateTime(e.at) },
+              { key: 'msg', header: 'Detalhe', mobile: 'full', label: '', td: 'break-words text-xs', cell: (e: any) => e.message },
+            ]}
+          />
         </Card>
       )}
 

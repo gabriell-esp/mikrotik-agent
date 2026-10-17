@@ -68,13 +68,13 @@ export default function PppoePage() {
             <Link
               key={d.device_id}
               to={`/pppoe/${d.device_id}`}
-              className="group flex flex-col rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:border-brand-300 hover:shadow-md"
+              className="group flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition hover:border-brand-300 hover:shadow-md active:scale-[0.99] sm:rounded-xl sm:p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Building className="size-5" /></div>
                   <div className="min-w-0">
-                    <div className="truncate font-semibold text-slate-900">{d.client_name ?? 'Sem cliente'}</div>
+                    <div className="line-clamp-2 font-semibold leading-snug text-slate-900 sm:truncate">{d.client_name ?? 'Sem cliente'}</div>
                     <div className="flex items-center gap-1.5 truncate text-xs text-slate-500"><Router className="size-3.5" />{d.device_name} · <span className="mono">{d.host}</span></div>
                   </div>
                 </div>

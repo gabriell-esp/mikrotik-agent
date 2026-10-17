@@ -23,6 +23,26 @@ body,
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
   font-feature-settings: 'cv11', 'ss01';
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Altura real da tela no celular (barra de endereço dinâmica) */
+#root {
+  height: 100dvh;
+}
+
+/* Áreas seguras (notch / barra de gestos) quando instalado como app */
+@supports (padding: env(safe-area-inset-top)) {
+  header.sticky {
+    padding-top: env(safe-area-inset-top);
+    height: calc(3.5rem + env(safe-area-inset-top));
+  }
+  @media (min-width: 640px) {
+    header.sticky {
+      height: calc(4rem + env(safe-area-inset-top));
+    }
+  }
 }
 
 /* Tabelas de dados */

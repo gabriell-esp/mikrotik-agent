@@ -3,8 +3,9 @@ import clsx from 'clsx';
 import { Activity, AlertTriangle, ArrowRight, CheckCircle2, KeyRound, Router, ShieldAlert, Waypoints, WifiOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import DeviceList from '../components/DeviceList';
 import {
-  Badge, Card, DeviceStatusBadge, Empty, ErrorBox, PageHeader, PageSkeleton, Pagination, PeerStateBadge, SearchBox, SegmentBar, Select,
+  Card, Empty, ErrorBox, PageHeader, PageSkeleton, Pagination, SearchBox, SegmentBar, Select,
   StatCard, TableSkeleton, TimeAgo, usePaged,
 } from '../components/ui';
 import { get } from '../lib/api';
@@ -130,13 +131,13 @@ export default function DashboardPage() {
             <>
               <SearchBox value={search} onChange={setSearch} placeholder="Cliente, equipamento, IP…" className="w-full sm:w-60" />
               {can('clients.view') && (
-                <Select value={client} onChange={(e) => setClient(e.target.value)} className="w-full sm:w-44">
-                  <option value="">Todos os clientes</option>
+                <Select value={client} onChange={(e) => setClient(e.target.value)} className="w-[calc(50%-0.25rem)] sm:w-44">
+                  <option value="">Cliente: todos</option>
                   {(clients.data ?? []).map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
                 </Select>
               )}
-              <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full sm:w-48">
-                <option value="">Todos os status</option>
+              <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-[calc(50%-0.25rem)] sm:w-48">
+                <option value="">Status: todos</option>
                 <option value="online">Gerenciável</option>
                 <option value="unreachable">Inacessível</option>
                 <option value="auth_failed">Falha de autenticação</option>
@@ -147,30 +148,8 @@ export default function DashboardPage() {
           }
         >
           {devices.isLoading ? <TableSkeleton /> : filtered.length === 0 ? <Empty>Nenhum equipamento encontrado.</Empty> : (
-            <div className="overflow-x-auto">
-              <table className="tbl">
-                <thead>
-                  <tr><th>Equipamento</th><th>Cliente</th><th>Gerência</th><th>Túnel WireGuard</th><th>Versão</th><th>Última resposta</th></tr>
-                </thead>
-                <tbody>
-                  {paged.slice.map((x: any) => (
-                    <tr key={x.id} className="cursor-pointer" onClick={() => nav(`/equipamentos/${x.id}`)}>
-                      <td>
-                        <div className="flex items-center gap-2">
-                          <Link to={`/equipamentos/${x.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-slate-900 hover:text-brand-700">{x.name}</Link>
-                          {x.is_central && <Badge color="purple">central</Badge>}
-                        </div>
-                        <div className="mono">{x.host}</div>
-                      </td>
-                      <td>{x.client_name ?? <span className="text-slate-400">—</span>}</td>
-                      <td><DeviceStatusBadge status={x.status} title={x.status_message} /></td>
-                      <td><PeerStateBadge state={x.peer_state} /></td>
-                      <td className="text-xs text-slate-500">{x.ros_version ?? '—'}</td>
-                      <td className="whitespace-nowrap text-xs text-slate-500"><TimeAgo date={x.last_ok_at} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <DeviceList rows={paged.slice} />
               <Pagination page={paged.page} pageSize={paged.pageSize} total={paged.total} onPage={paged.setPage} />
             </div>
           )}

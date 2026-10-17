@@ -3,9 +3,11 @@ import { Copy, Eye, Pencil, Plus, Power, PowerOff, RefreshCw, Trash2, Unplug, Wa
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { del, get, post, put } from '../lib/api';
+import DataList from './DataList';
+import RowActions from './RowActions';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime } from '../lib/format';
-import { IconButton,
+import {
   Badge, Button, Card, Checkbox, ConfirmDialog, Empty, ErrorBox, Field, Input, Modal, Notice, Pagination, SearchBox, Select, Spinner, TableSkeleton, useToast,
 } from './ui';
 
@@ -80,7 +82,7 @@ function SecretForm({ open, onClose, deviceId, secret, devices }: { open: boolea
       onClose={onClose}
       wide
       title={editing ? `Editar secret: ${secret.name}` : 'Novo secret PPPoE'}
-      footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="primary" loading={save.isPending} disabled={!dev} onClick={() => save.mutate()}>Salvar no equipamento</Button></>}
+      footer={<><Button onClick={onClose}>Cancelar</Button><Button variant="primary" loading={save.isPending} disabled={!dev} onClick={() => save.mutate()}>Salvar<span className="max-sm:hidden"> no equipamento</span></Button></>}
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2"><ErrorBox error={error} title="O equipamento não aceitou a alteração" /></div>
@@ -201,7 +203,7 @@ export function SecretsList({ deviceId, initialSearch = '' }: { deviceId?: numbe
             <SearchBox value={search} onChange={setSearch} placeholder="Usuário, comentário, IP, cliente…" className="w-full sm:w-64" />
             {!deviceId && can('clients.view') && (
               <Select value={clientId} onChange={(e) => setClientId(e.target.value)} className="w-full sm:w-44">
-                <option value="">Todos os clientes</option>
+                <option value="">Cliente: todos</option>
                 {(clients.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
             )}
@@ -211,15 +213,15 @@ export function SecretsList({ deviceId, initialSearch = '' }: { deviceId?: numbe
                 {(data?.devices ?? []).map((d: any) => <option key={d.device_id} value={d.device_id}>{d.device_name}</option>)}
               </Select>
             )}
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full sm:w-40">
+            <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-[calc(50%-0.25rem)] sm:w-40">
               <option value="">Todos</option>
               <option value="enabled">Habilitados</option>
               <option value="disabled">Desabilitados</option>
               <option value="connected">Conectados</option>
               <option value="disconnected">Desconectados</option>
             </Select>
-            <Button onClick={() => refresh.mutate()} loading={refresh.isPending} title="Consultar os equipamentos agora"><RefreshCw className="size-4" /> Atualizar</Button>
-            {can('pppoe.create') && <Button variant="primary" onClick={() => setForm({ open: true })}><Plus className="size-4" /> Novo</Button>}
+            <Button className="w-[calc(50%-0.25rem)] sm:w-auto" onClick={() => refresh.mutate()} loading={refresh.isPending} title="Consultar os equipamentos agora"><RefreshCw className="size-4" /> Atualizar</Button>
+            {can('pppoe.create') && <Button variant="primary" className="w-full sm:w-auto" onClick={() => setForm({ open: true })}><Plus className="size-4" /> Novo usuário</Button>}
           </>
         }
       >
@@ -239,49 +241,70 @@ export function SecretsList({ deviceId, initialSearch = '' }: { deviceId?: numbe
           </div>
         )}
         {q.isLoading ? <TableSkeleton cols={6} /> : q.error ? <div className="p-4"><ErrorBox error={q.error} /></div> : !data.rows.length ? <Empty>Nenhum secret encontrado.</Empty> : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Usuário</th>{!deviceId && <th>Equipamento / cliente</th>}<th>Perfil</th><th>Serviço</th><th>Endereços</th><th>Estado</th><th>Comentário</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((s: any) => (
-                  <tr key={`${s.device_id}:${s.id}`} className={s.disabled ? 'text-slate-400' : ''}>
-                    <td className="font-medium">
-                      {s.name}
-                      {s.caller_id && <div className="mono text-slate-400">MAC {s.caller_id}</div>}
-                    </td>
-                    {!deviceId && (
-                      <td>
-                        <Link to={`/pppoe/${s.device_id}`} className="text-brand-700 hover:underline">{s.device_name}</Link>
-                        <div className="text-xs text-slate-500">{s.client_name ?? '—'}</div>
-                      </td>
-                    )}
-                    <td>{s.profile}</td>
-                    <td className="text-xs">{s.service}</td>
-                    <td className="mono">{s.remote_address || <span className="text-slate-300">pool</span>}{s.local_address && <div className="text-slate-400">local {s.local_address}</div>}</td>
-                    <td className="space-x-1 whitespace-nowrap">
-                      {s.disabled ? <Badge color="red">Desabilitado</Badge> : <Badge color="green">Habilitado</Badge>}
+          <>
+            <DataList
+              rows={data.rows}
+              rowKey={(s: any) => `${s.device_id}:${s.id}`}
+              rowClass={(s: any) => (s.disabled ? 'text-slate-400' : undefined)}
+              accent={(s: any) => (s.disabled ? 'red' : s.connected ? 'green' : 'slate')}
+              cols={[
+                {
+                  key: 'name', header: 'Usuário', mobile: 'title',
+                  cell: (s: any) => (
+                    <div>
+                      <span className="font-medium">{s.name}</span>
+                      {s.caller_id && <div className="mono font-normal text-slate-400">MAC {s.caller_id}</div>}
+                    </div>
+                  ),
+                },
+                ...(!deviceId
+                  ? [{
+                      key: 'device', header: 'Equipamento / cliente', mobile: 'subtitle' as const,
+                      cell: (s: any) => (
+                        <Link to={`/pppoe/${s.device_id}`} className="text-brand-700 hover:underline">
+                          {s.device_name}<span className="block text-xs text-slate-500 max-md:inline max-md:before:content-['_·_']">{s.client_name ?? '—'}</span>
+                        </Link>
+                      ),
+                    }]
+                  : []),
+                {
+                  key: 'state', header: 'Estado', mobile: 'badges', td: 'whitespace-nowrap',
+                  cell: (s: any) => (
+                    <div className="flex flex-wrap gap-1">
+                      {s.disabled ? <Badge color="red" dot>Desabilitado</Badge> : <Badge color="green" dot>Habilitado</Badge>}
                       {s.connected ? <Badge color="blue">Conectado</Badge> : <Badge>Desconectado</Badge>}
                       {s.stale && <Badge color="amber">desatualizado</Badge>}
-                    </td>
-                    <td className="max-w-56 break-words text-xs">{s.comment}</td>
-                    <td className="whitespace-nowrap text-right">
-                      {can('pppoe.password') && <IconButton icon={Eye} label="Ver senha (registrado na auditoria)" onClick={() => showPassword(s)} />}
-                      {can('pppoe.edit') && <IconButton icon={Pencil} label="Editar" onClick={() => setForm({ open: true, secret: s })} />}
-                      {can('pppoe.toggle') && (
-                        <IconButton icon={s.disabled ? Power : PowerOff} label={s.disabled ? 'Habilitar' : 'Desabilitar'} tone={s.disabled ? 'success' : 'warning'} onClick={() => { setDisconnect(true); setToggle(s); }} />
-                      )}
-                      {can('pppoe.delete') && <IconButton icon={Trash2} label="Excluir" tone="danger" onClick={() => setRemoving(s)} />}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  ),
+                },
+                { key: 'profile', header: 'Perfil', cell: (s: any) => s.profile },
+                {
+                  key: 'addr', header: 'Endereços', label: 'IP',
+                  cell: (s: any) => <span className="mono">{s.remote_address || <span className="text-slate-300">pool</span>}{s.local_address && <span className="block text-slate-400">local {s.local_address}</span>}</span>,
+                },
+                { key: 'service', header: 'Serviço', mobile: 'hide', cell: (s: any) => <span className="text-xs">{s.service}</span> },
+                { key: 'comment', header: 'Comentário', mobile: 'full', td: 'max-w-56 break-words text-xs', cell: (s: any) => s.comment || <span className="text-slate-300">—</span> },
+                {
+                  key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
+                  cell: (s: any) => (
+                    <RowActions
+                      title={s.name}
+                      actions={[
+                        { icon: Eye, label: 'Ver senha (registrado na auditoria)', short: 'Ver senha', onClick: () => showPassword(s), show: can('pppoe.password') },
+                        { icon: Pencil, label: 'Editar', onClick: () => setForm({ open: true, secret: s }), show: can('pppoe.edit') },
+                        {
+                          icon: s.disabled ? Power : PowerOff, label: s.disabled ? 'Habilitar' : 'Desabilitar', tone: s.disabled ? 'success' : 'warning',
+                          onClick: () => { setDisconnect(true); setToggle(s); }, show: can('pppoe.toggle'),
+                        },
+                        { icon: Trash2, label: 'Excluir', tone: 'danger', onClick: () => setRemoving(s), show: can('pppoe.delete') },
+                      ]}
+                    />
+                  ),
+                },
+              ]}
+            />
             <Pagination page={data.page} pageSize={data.page_size} total={data.total} onPage={setPage} />
-          </div>
+          </>
         )}
       </Card>
 
@@ -361,32 +384,36 @@ export function ActiveSessions({ deviceId }: { deviceId?: number }) {
       actions={
         <>
           <SearchBox value={search} onChange={setSearch} placeholder="Usuário, IP, MAC…" className="w-full sm:w-60" />
-          <Button onClick={() => refresh.mutate()} loading={refresh.isPending}><RefreshCw className="size-4" /> Atualizar</Button>
+          <Button className="w-full sm:w-auto" onClick={() => refresh.mutate()} loading={refresh.isPending}><RefreshCw className="size-4" /> Atualizar</Button>
         </>
       }
     >
       {q.isLoading ? <TableSkeleton cols={6} /> : q.error ? <div className="p-4"><ErrorBox error={q.error} /></div> : !q.data.rows.length ? <Empty>Nenhuma sessão ativa.</Empty> : (
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead><tr><th>Usuário</th>{!deviceId && <th>Equipamento / cliente</th>}<th>Endereço</th><th>Caller ID</th><th>Uptime</th><th>Serviço</th><th></th></tr></thead>
-            <tbody>
-              {q.data.rows.map((a: any) => (
-                <tr key={`${a.device_id}:${a.id}`}>
-                  <td className="font-medium">{a.name} {a.stale && <Badge color="amber">desatualizado</Badge>}</td>
-                  {!deviceId && <td><Link to={`/pppoe/${a.device_id}`} className="text-brand-700 hover:underline">{a.device_name}</Link><div className="text-xs text-slate-500">{a.client_name ?? '—'}</div></td>}
-                  <td className="mono">{a.address}</td>
-                  <td className="mono">{a.caller_id}</td>
-                  <td>{a.uptime}</td>
-                  <td className="text-xs">{a.service}{a.encoding ? ` · ${a.encoding}` : ''}</td>
-                  <td className="text-right">
-                    {can('pppoe.disconnect') && <IconButton icon={Unplug} label="Desconectar" tone="danger" onClick={() => setTarget(a)} />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <>
+          <DataList
+            rows={q.data.rows}
+            rowKey={(a: any) => `${a.device_id}:${a.id}`}
+            accent={() => 'green'}
+            cols={[
+              { key: 'name', header: 'Usuário', mobile: 'title', cell: (a: any) => <span className="font-medium">{a.name} {a.stale && <Badge color="amber">desatualizado</Badge>}</span> },
+              ...(!deviceId
+                ? [{
+                    key: 'device', header: 'Equipamento / cliente', mobile: 'subtitle' as const,
+                    cell: (a: any) => <Link to={`/pppoe/${a.device_id}`} className="text-brand-700 hover:underline">{a.device_name}<span className="block text-xs text-slate-500 max-md:inline max-md:before:content-['_·_']">{a.client_name ?? '—'}</span></Link>,
+                  }]
+                : []),
+              { key: 'address', header: 'Endereço', label: 'IP', cell: (a: any) => <span className="mono">{a.address}</span> },
+              { key: 'uptime', header: 'Uptime', label: 'Conectado há', cell: (a: any) => a.uptime },
+              { key: 'caller', header: 'Caller ID', label: 'MAC', cell: (a: any) => <span className="mono">{a.caller_id}</span> },
+              { key: 'service', header: 'Serviço', cell: (a: any) => <span className="text-xs">{a.service}{a.encoding ? ` · ${a.encoding}` : ''}</span> },
+              {
+                key: 'actions', header: '', mobile: 'actions', td: 'text-right',
+                cell: (a: any) => <RowActions title={a.name} actions={[{ icon: Unplug, label: 'Desconectar', tone: 'danger', onClick: () => setTarget(a), show: can('pppoe.disconnect') }]} />,
+              },
+            ]}
+          />
           <Pagination page={q.data.page} pageSize={q.data.page_size} total={q.data.total} onPage={setPage} />
-        </div>
+        </>
       )}
       <ConfirmDialog
         open={!!target}

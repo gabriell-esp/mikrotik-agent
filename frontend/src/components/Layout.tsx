@@ -11,13 +11,13 @@ import { useAuth } from '../lib/auth';
 import CommandPalette from './CommandPalette';
 import LiveIndicator from './LiveIndicator';
 
-interface NavItem { to: string; label: string; icon: LucideIcon; perm: string }
+interface NavItem { to: string; label: string; short?: string; icon: LucideIcon; perm: string }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
   { title: 'Monitoramento', items: [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard, perm: 'dashboard.view' },
+    { to: '/', label: 'Dashboard', short: 'Início', icon: LayoutDashboard, perm: 'dashboard.view' },
     { to: '/wireguard', label: 'WireGuard', icon: Waypoints, perm: 'wireguard.view' },
-    { to: '/equipamentos', label: 'Equipamentos', icon: Router, perm: 'devices.view' },
+    { to: '/equipamentos', label: 'Equipamentos', short: 'Equip.', icon: Router, perm: 'devices.view' },
   ] },
   { title: 'Atendimento', items: [
     { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
@@ -71,6 +71,14 @@ export default function Layout() {
     () => SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => can(i.perm)) })).filter((s) => s.items.length),
     [can],
   );
+  const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
+  const bottomItems = useMemo(() => {
+    const prefer = ['/', '/equipamentos', '/pppoe', '/wireguard'];
+    return prefer.map((to) => allItems.find((i) => i.to === to)).filter(Boolean).slice(0, 4) as NavItem[];
+  }, [allItems]);
+  const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => (i.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(i.to)));
+  const moreActive = !!activeItem && !bottomItems.includes(activeItem);
+  const currentLabel = loc.pathname === '/senha' ? 'Alterar senha' : activeItem?.label ?? 'Slot1';
   const pages = useMemo(() => sections.flatMap((s) => s.items).map((i) => ({ to: i.to, label: i.label, icon: <i.icon className="size-4" /> })), [sections]);
 
   useEffect(() => setMobileOpen(false), [loc.pathname]);
@@ -158,36 +166,53 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Barra lateral (celular) */}
+      {/* Menu completo (celular) */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/50" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-slate-950 shadow-2xl">
-            <div className="flex items-center justify-between pr-3">
-              <Brand />
-              <button onClick={() => setMobileOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5" aria-label="Fechar menu"><X className="size-5" /></button>
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-3xl bg-slate-950 pb-[env(safe-area-inset-bottom)] shadow-2xl">
+            <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-white/15" aria-hidden />
+            <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-1">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-semibold text-white">{initials(user?.name)}</span>
+                <div className="min-w-0 leading-tight">
+                  <div className="truncate font-medium text-white">{user?.name}</div>
+                  <div className="truncate text-xs text-slate-400">{user?.username} · {user?.roleLabel}</div>
+                </div>
+              </div>
+              <button onClick={() => setMobileOpen(false)} className="flex size-10 items-center justify-center rounded-full bg-white/5 text-slate-300" aria-label="Fechar menu"><X className="size-5" /></button>
             </div>
-            {navList(false)}
-          </aside>
+            <div className="overflow-y-auto overscroll-contain">{navList(false)}</div>
+            <div className="grid grid-cols-2 gap-2 border-t border-white/5 p-3">
+              <button onClick={() => { setMobileOpen(false); nav('/senha'); }} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white/5 text-sm font-medium text-slate-200 active:bg-white/10">
+                <KeyRound className="size-4" /> Alterar senha
+              </button>
+              <button onClick={logout} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500/10 text-sm font-medium text-red-300 active:bg-red-500/20">
+                <LogOut className="size-4" /> Sair
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur sm:px-6">
-          <button onClick={() => setMobileOpen(true)} className="-ml-1 rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu">
-            <Menu className="size-5" />
-          </button>
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-md sm:h-16 sm:gap-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5 lg:hidden">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-md shadow-brand-600/30">S1</div>
+            <span className="truncate text-[15px] font-semibold text-slate-900 sm:hidden">{currentLabel}</span>
+          </div>
           <button
             onClick={() => setPalette(true)}
-            className="flex h-9 min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 hover:bg-white sm:max-w-md"
+            aria-label="Buscar"
+            className="order-last flex size-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-white sm:order-none sm:h-9 sm:w-auto sm:min-w-0 sm:flex-1 sm:justify-start sm:gap-2.5 sm:rounded-lg sm:px-3 sm:text-sm sm:text-slate-400 md:max-w-md"
           >
-            <Search className="size-4 shrink-0" />
-            <span className="truncate">Buscar equipamento, cliente ou PPPoE…</span>
+            <Search className="size-[18px] shrink-0 sm:size-4" />
+            <span className="hidden truncate sm:inline">Buscar equipamento, cliente ou PPPoE…</span>
             <kbd className="ml-auto hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 sm:block">Ctrl K</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <LiveIndicator />
-            <div className="relative" ref={menuRef}>
+            <div className="relative hidden lg:block" ref={menuRef}>
               <button onClick={() => setMenu((m) => !m)} className="flex items-center gap-2 rounded-lg p-1 pr-1.5 hover:bg-slate-100" aria-label="Menu do usuário">
                 <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-semibold text-white">{initials(user?.name)}</span>
                 <span className="hidden text-left leading-tight md:block">
@@ -214,10 +239,37 @@ export default function Layout() {
           </div>
         </header>
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-[1600px] px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:p-8">
             <Outlet />
           </div>
         </main>
+
+        {/* Navegação inferior (celular/tablet) */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
+          <div className="mx-auto flex max-w-lg items-stretch justify-around px-1">
+            {bottomItems.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                end={n.to === '/'}
+                className={({ isActive }) => clsx('flex min-w-0 flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] font-medium transition-colors', isActive ? 'text-brand-600' : 'text-slate-500')}
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className={clsx('flex h-7 w-12 items-center justify-center rounded-full transition-colors', isActive && 'bg-brand-50')}>
+                      <n.icon className="size-5" strokeWidth={isActive ? 2.25 : 1.75} />
+                    </span>
+                    <span className="truncate">{n.short ?? n.label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+            <button onClick={() => setMobileOpen(true)} className={clsx('flex min-w-0 flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] font-medium', moreActive ? 'text-brand-600' : 'text-slate-500')}>
+              <span className={clsx('flex h-7 w-12 items-center justify-center rounded-full', moreActive && 'bg-brand-50')}><Menu className="size-5" /></span>
+              Menu
+            </button>
+          </div>
+        </nav>
       </div>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />

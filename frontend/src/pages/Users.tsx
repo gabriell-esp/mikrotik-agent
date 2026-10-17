@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, LockOpen, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
-import { IconButton, Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, useToast } from '../components/ui';
+import DataList from '../components/DataList';
+import RowActions from '../components/RowActions';
+import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, useToast } from '../components/ui';
 import { get, post, put } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime } from '../lib/format';
@@ -82,37 +84,56 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Usuários do sistema" actions={<Button variant="primary" onClick={() => open()}><Plus className="size-4" /> Novo usuário</Button>} />
+      <PageHeader title="Usuários do sistema" actions={<Button variant="primary" className="w-full sm:w-auto" onClick={() => open()}><Plus className="size-4" /> Novo usuário</Button>} />
       <Card bodyClass="">
         {users.isLoading ? <TableSkeleton cols={5} /> : users.error ? <div className="p-4"><ErrorBox error={users.error} /></div> : !users.data.length ? <Empty>Nenhum usuário.</Empty> : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead><tr><th>Usuário</th><th>Perfil</th><th>Clientes</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead>
-              <tbody>
-                {users.data.map((u: any) => (
-                  <tr key={u.id}>
-                    <td><div className="font-medium">{u.name}</div><div className="text-xs text-slate-500">{u.username}{u.email ? ` · ${u.email}` : ''}</div></td>
-                    <td>
+          <>
+            <DataList
+              rows={users.data}
+              rowKey={(u: any) => u.id}
+              accent={(u: any) => (!u.active ? 'slate' : u.locked ? 'red' : 'green')}
+              cols={[
+                {
+                  key: 'name', header: 'Usuário', mobile: 'title',
+                  cell: (u: any) => <div><span className="font-medium text-slate-900">{u.name}</span><span className="block text-xs font-normal text-slate-500">{u.username}{u.email ? ` · ${u.email}` : ''}</span></div>,
+                },
+                {
+                  key: 'role', header: 'Perfil', mobile: 'badges',
+                  cell: (u: any) => (
+                    <div className="flex flex-wrap items-center gap-1 md:block">
                       <Badge color={ROLE_COLOR[u.role]}>{roles[u.role] ?? u.role}</Badge>
-                      {(u.permissions_grant.length > 0 || u.permissions_revoke.length > 0) && <div className="text-xs text-slate-500">permissões ajustadas</div>}
-                    </td>
-                    <td className="text-xs">{u.all_clients || u.role === 'admin' ? 'Todos' : `${u.client_ids.length} cliente(s)`}</td>
-                    <td className="space-x-1">
-                      {u.active ? <Badge color="green">Ativo</Badge> : <Badge>Inativo</Badge>}
+                      {(u.permissions_grant.length > 0 || u.permissions_revoke.length > 0) && <span className="text-xs text-slate-500 md:block">permissões ajustadas</span>}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'status', header: 'Situação', mobile: 'badges',
+                  cell: (u: any) => (
+                    <div className="flex flex-wrap gap-1">
+                      {u.active ? <Badge color="green" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}
                       {u.locked && <Badge color="red">Bloqueado</Badge>}
                       {u.must_change_password && <Badge color="amber">Trocar senha</Badge>}
-                    </td>
-                    <td className="text-xs">{fmtDateTime(u.last_login_at)}</td>
-                    <td className="whitespace-nowrap text-right">
-                      {u.locked && <IconButton icon={LockOpen} label="Desbloquear" onClick={() => unlock.mutate(u.id)} />}
-                      <IconButton icon={KeyRound} label="Redefinir senha" onClick={() => { setNewPw(''); setResetting(u); }} />
-                      <IconButton icon={Pencil} label="Editar" onClick={() => open(u)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  ),
+                },
+                { key: 'clients', header: 'Clientes', cell: (u: any) => <span className="text-xs">{u.all_clients || u.role === 'admin' ? 'Todos' : `${u.client_ids.length} cliente(s)`}</span> },
+                { key: 'last', header: 'Último acesso', cell: (u: any) => <span className="text-xs">{fmtDateTime(u.last_login_at)}</span> },
+                {
+                  key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
+                  cell: (u: any) => (
+                    <RowActions
+                      title={u.name}
+                      actions={[
+                        { icon: LockOpen, label: 'Desbloquear', onClick: () => unlock.mutate(u.id), show: u.locked },
+                        { icon: KeyRound, label: 'Redefinir senha', onClick: () => { setNewPw(''); setResetting(u); } },
+                        { icon: Pencil, label: 'Editar', onClick: () => open(u) },
+                      ]}
+                    />
+                  ),
+                },
+              ]}
+            />
+          </>
         )}
       </Card>
 

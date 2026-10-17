@@ -2,9 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link2, Plus, RefreshCw, Unlink } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import DataList from '../components/DataList';
 import DeviceForm, { type DeviceFormInitial } from '../components/DeviceForm';
 import {
-  Badge, Button, Card, Checkbox, DeviceStatusBadge, Empty, ErrorBox, Field, Freshness, Modal, Notice, PageHeader, Pagination,
+  Badge, Button, Card, Checkbox, IconButton, DeviceStatusBadge, Empty, ErrorBox, Field, Freshness, Modal, Notice, PageHeader, Pagination,
   PageSkeleton, PeerStateBadge, SearchBox, Select, usePaged, useToast,
 } from '../components/ui';
 import { get, post, put } from '../lib/api';
@@ -86,7 +87,7 @@ export default function WireguardPage() {
       <PageHeader
         title="Peers WireGuard"
         subtitle={<>Central: <b>{data.central.name}</b> ({data.central.host}) · RouterOS {data.central.ros_version ?? '?'}</>}
-        actions={<Button onClick={() => sync.mutate()} loading={sync.isPending}><RefreshCw className="size-4" /> Ler da central agora</Button>}
+        actions={<Button className="w-full sm:w-auto" onClick={() => sync.mutate()} loading={sync.isPending}><RefreshCw className="size-4" /> Ler da central agora</Button>}
       />
       {data.sync && <Freshness collectedAt={data.sync.collectedAt} stale={data.sync.stale} error={data.sync.error} />}
       <Notice kind="info">
@@ -99,15 +100,15 @@ export default function WireguardPage() {
         actions={
           <>
             <SearchBox value={search} onChange={setSearch} placeholder="Nome, IP, cliente, chave…" className="w-full sm:w-60" />
-            <Select value={state} onChange={(e) => setState(e.target.value)} className="w-full sm:w-48">
-              <option value="">Todos os estados</option>
+            <Select value={state} onChange={(e) => setState(e.target.value)} className="w-[calc(50%-0.25rem)] sm:w-48">
+              <option value="">Estado: todos</option>
               <option value="recent">Handshake recente</option>
               <option value="stale">Sem handshake recente</option>
               <option value="never">Sem handshake</option>
               <option value="disabled">Desabilitado</option>
             </Select>
-            <Select value={link} onChange={(e) => setLink(e.target.value)} className="w-full sm:w-40">
-              <option value="">Vinculados ou não</option>
+            <Select value={link} onChange={(e) => setLink(e.target.value)} className="w-[calc(50%-0.25rem)] sm:w-40">
+              <option value="">Vínculo: todos</option>
               <option value="linked">Vinculados</option>
               <option value="unlinked">Sem vínculo</option>
             </Select>
@@ -116,63 +117,68 @@ export default function WireguardPage() {
         }
       >
         {rows.length === 0 ? <Empty>Nenhum peer encontrado.</Empty> : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Peer</th><th>Interface</th><th>Allowed address</th><th>Endpoint configurado</th><th>Endpoint atual</th>
-                  <th>Último handshake</th><th>Rx / Tx</th><th>Equipamento / cliente</th><th>Gerência</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {paged.slice.map((p: any) => {
-                  const age = handshakeAge(p);
-                  return (
-                    <tr key={p.id} className={p.present ? '' : 'opacity-50'}>
-                      <td>
-                        <div className="font-medium">{p.name || p.comment || <span className="text-slate-400">(sem nome)</span>}</div>
-                        {p.name && p.comment && <div className="text-xs text-slate-500">{p.comment}</div>}
-                        <div className="mono max-w-40 truncate text-slate-400" title={p.public_key}>{p.public_key}</div>
-                        {!p.present && <Badge color="red">removido da central</Badge>}
-                      </td>
-                      <td className="text-xs">{p.interface}</td>
-                      <td className="mono">{(p.allowed_address ?? '').split(',').map((a: string) => <div key={a}>{a}</div>)}</td>
-                      <td className="mono">{endpoint(p.endpoint_address, p.endpoint_port)}</td>
-                      <td className="mono">{endpoint(p.current_endpoint_address, p.current_endpoint_port)}</td>
-                      <td>
+          <>
+            <DataList
+              rows={paged.slice}
+              rowKey={(p: any) => p.id}
+              rowClass={(p: any) => (p.present ? undefined : 'opacity-50')}
+              accent={(p: any) => ({ recent: 'green', stale: 'amber', never: 'slate', disabled: 'red' } as const)[p.state as 'recent'] ?? 'slate'}
+              cols={[
+                {
+                  key: 'peer', header: 'Peer', mobile: 'title',
+                  cell: (p: any) => (
+                    <div>
+                      <div className="font-medium">{p.name || p.comment || <span className="text-slate-400">(sem nome)</span>}</div>
+                      {p.name && p.comment && <div className="text-xs font-normal text-slate-500">{p.comment}</div>}
+                      <div className="mono hidden max-w-40 truncate text-slate-400 md:block" title={p.public_key}>{p.public_key}</div>
+                    </div>
+                  ),
+                },
+                {
+                  key: 'device', header: 'Equipamento / cliente', mobile: 'subtitle',
+                  cell: (p: any) => p.device_id ? (
+                    <Link to={`/equipamentos/${p.device_id}`} className="text-brand-700 hover:underline">
+                      <span className="font-medium">{p.device_name}</span>
+                      <span className="block text-xs text-slate-500 max-md:inline max-md:before:content-['_·_']">{p.client_name ?? '—'}</span>
+                    </Link>
+                  ) : <span className="text-xs text-slate-400">não vinculado</span>,
+                },
+                {
+                  key: 'state', header: 'Último handshake', mobile: 'badges',
+                  cell: (p: any) => {
+                    const age = handshakeAge(p);
+                    return (
+                      <div className="flex flex-wrap items-center gap-1.5 md:block">
                         <PeerStateBadge state={p.state} />
-                        <div className="text-xs text-slate-500">{age == null ? 'nunca' : `há ${fmtDuration(age)}`}</div>
-                      </td>
-                      <td className="whitespace-nowrap text-xs">↓ {fmtBytes(p.rx_bytes)}<br />↑ {fmtBytes(p.tx_bytes)}</td>
-                      <td>
-                        {p.device_id ? (
-                          <>
-                            <Link to={`/equipamentos/${p.device_id}`} className="font-medium text-brand-700 hover:underline">{p.device_name}</Link>
-                            <div className="text-xs text-slate-500">{p.client_name ?? '—'}</div>
-                          </>
-                        ) : <span className="text-xs text-slate-400">não vinculado</span>}
-                      </td>
-                      <td>{p.device_id ? <DeviceStatusBadge status={p.device_status} title={p.device_status_message} /> : '—'}</td>
-                      <td className="whitespace-nowrap text-right">
-                        {can('wireguard.link') && (
-                          <Button variant="ghost" title="Vincular a equipamento" onClick={() => { setLinking(p); setLinkDevice(p.device_id ? String(p.device_id) : ''); }}>
-                            <Link2 className="size-4" />
-                          </Button>
-                        )}
-                        {!p.device_id && can('devices.manage') && (
-                          <Button variant="ghost" title="Cadastrar equipamento a partir deste peer"
-                            onClick={() => setCreating({ name: p.name || p.comment || '', host: p.suggested_host ?? '', wg_peer_id: p.id })}>
-                            <Plus className="size-4" />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <span className="text-xs text-slate-500 md:mt-1 md:block">{age == null ? 'nunca' : `há ${fmtDuration(age)}`}</span>
+                        {!p.present && <Badge color="red">removido da central</Badge>}
+                      </div>
+                    );
+                  },
+                },
+                { key: 'mgmt', header: 'Gerência', mobile: 'badges', cell: (p: any) => (p.device_id ? <DeviceStatusBadge status={p.device_status} title={p.device_status_message} /> : null) },
+                { key: 'allowed', header: 'Allowed address', label: 'Allowed', cell: (p: any) => <span className="mono">{(p.allowed_address ?? '').split(',').map((a: string) => <span key={a} className="block">{a}</span>)}</span> },
+                { key: 'current', header: 'Endpoint atual', cell: (p: any) => <span className="mono">{endpoint(p.current_endpoint_address, p.current_endpoint_port)}</span> },
+                { key: 'endpoint', header: 'Endpoint configurado', label: 'Endpoint fixo', cell: (p: any) => <span className="mono">{endpoint(p.endpoint_address, p.endpoint_port)}</span> },
+                { key: 'traffic', header: 'Rx / Tx', label: 'Tráfego', cell: (p: any) => <span className="whitespace-nowrap text-xs">↓ {fmtBytes(p.rx_bytes)} <br className="max-md:hidden" />↑ {fmtBytes(p.tx_bytes)}</span> },
+                { key: 'iface', header: 'Interface', cell: (p: any) => <span className="text-xs">{p.interface}</span> },
+                {
+                  key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
+                  cell: (p: any) => (
+                    <>
+                      {can('wireguard.link') && (
+                        <IconButton icon={Link2} label="Vincular a equipamento" onClick={() => { setLinking(p); setLinkDevice(p.device_id ? String(p.device_id) : ''); }} />
+                      )}
+                      {!p.device_id && can('devices.manage') && (
+                        <IconButton icon={Plus} label="Cadastrar equipamento a partir deste peer" onClick={() => setCreating({ name: p.name || p.comment || '', host: p.suggested_host ?? '', wg_peer_id: p.id })} />
+                      )}
+                    </>
+                  ),
+                },
+              ]}
+            />
             <Pagination page={paged.page} pageSize={paged.pageSize} total={paged.total} onPage={paged.setPage} />
-          </div>
+          </>
         )}
       </Card>
 

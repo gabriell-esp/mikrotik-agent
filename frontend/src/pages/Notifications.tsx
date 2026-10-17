@@ -3,9 +3,11 @@ import clsx from 'clsx';
 import { BellRing, CheckCircle2, History, Link2, LogOut, MessageCircle, Pencil, Plus, QrCode, Send, Server, Smartphone, Trash2, Users, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
-  Badge, Button, Card, Checkbox, ConfirmDialog, Empty, ErrorBox, Field, IconButton, Input, Modal, Notice, PageHeader, Pagination, Select,
+  Badge, Button, Card, Checkbox, ConfirmDialog, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Pagination, Select,
   Skeleton, Switch, TableSkeleton, useToast,
 } from '../components/ui';
+import DataList from '../components/DataList';
+import RowActions from '../components/RowActions';
 import { del, get, post, put } from '../lib/api';
 import { fmtDateTime } from '../lib/format';
 
@@ -329,43 +331,52 @@ function RecipientsCard({ events, connected }: { events: Record<string, string>;
       icon={Users}
       subtitle="Números e grupos que recebem os alertas"
       bodyClass=""
-      actions={<Button variant="primary" onClick={() => setForm({ open: true })}><Plus className="size-4" /> Adicionar</Button>}
+      actions={<Button variant="primary" className="w-full sm:w-auto" onClick={() => setForm({ open: true })}><Plus className="size-4" /> Adicionar</Button>}
     >
       {rec.isLoading ? <TableSkeleton cols={5} rows={3} /> : !rec.data?.length ? (
         <Empty icon={MessageCircle}>Nenhum destinatário. Adicione o número do plantão ou o grupo da equipe.</Empty>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead><tr><th>Destinatário</th><th>Eventos</th><th>Clientes</th><th>Situação</th><th></th></tr></thead>
-            <tbody>
-              {rec.data.map((r: any) => (
-                <tr key={r.id}>
-                  <td>
+        <>
+          <DataList
+            rows={rec.data}
+            rowKey={(r: any) => r.id}
+            accent={(r: any) => (r.enabled ? 'green' : 'slate')}
+            cols={[
+              {
+                key: 'name', header: 'Destinatário', mobile: 'title',
+                cell: (r: any) => (
+                  <div>
                     <div className="flex items-center gap-2 font-medium text-slate-900">
-                      {r.is_group ? <Users className="size-4 text-slate-400" /> : <Smartphone className="size-4 text-slate-400" />}
+                      {r.is_group ? <Users className="size-4 shrink-0 text-slate-400" /> : <Smartphone className="size-4 shrink-0 text-slate-400" />}
                       {r.name}
                     </div>
-                    <div className="mono">{fmtTarget(r.target, r.is_group)}</div>
-                  </td>
-                  <td>
-                    <div className="flex max-w-md flex-wrap gap-1">
-                      {r.events.map((e: string) => <Badge key={e} color="blue">{events[e] ?? e}</Badge>)}
-                    </div>
-                  </td>
-                  <td className="text-xs">{r.client_ids == null ? 'Todos' : r.client_ids.map(clientName).join(', ')}</td>
-                  <td>{r.enabled ? <Badge color="green" dot>Ativo</Badge> : <Badge dot>Pausado</Badge>}</td>
-                  <td className="whitespace-nowrap text-right">
-                    <Button size="sm" variant="ghost" onClick={() => test(r)} loading={testing === r.id} disabled={!connected} title={connected ? 'Enviar mensagem de teste' : 'Conecte o WhatsApp primeiro'}>
-                      <Send className="size-3.5" /> Testar
-                    </Button>
-                    <IconButton icon={Pencil} label="Editar" onClick={() => setForm({ open: true, r })} />
-                    <IconButton icon={Trash2} label="Remover" tone="danger" onClick={() => setRemoving(r)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    <div className="mono font-normal">{fmtTarget(r.target, r.is_group)}</div>
+                  </div>
+                ),
+              },
+              { key: 'status', header: 'Situação', mobile: 'badges', cell: (r: any) => (r.enabled ? <Badge color="green" dot>Ativo</Badge> : <Badge dot>Pausado</Badge>) },
+              {
+                key: 'events', header: 'Eventos', mobile: 'full',
+                cell: (r: any) => <div className="flex max-w-md flex-wrap gap-1">{r.events.map((e: string) => <Badge key={e} color="blue">{events[e] ?? e}</Badge>)}</div>,
+              },
+              { key: 'clients', header: 'Clientes', cell: (r: any) => <span className="text-xs">{r.client_ids == null ? 'Todos' : r.client_ids.map(clientName).join(', ')}</span> },
+              {
+                key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
+                cell: (r: any) => (
+                  <RowActions
+                    title={r.name}
+                    actions={[
+                      { icon: Send, label: testing === r.id ? 'Enviando teste…' : 'Enviar mensagem de teste', short: 'Enviar teste', onClick: () => (connected ? void test(r) : toast.err('Conecte o WhatsApp antes de enviar o teste.')) },
+                      { icon: Pencil, label: 'Editar', onClick: () => setForm({ open: true, r }) },
+                      { icon: Trash2, label: 'Remover', tone: 'danger', onClick: () => setRemoving(r) },
+                    ]}
+                  />
+                ),
+              },
+            ]}
+          />
+
+        </>
       )}
       <RecipientForm open={form.open} recipient={form.r} events={events} onClose={() => setForm({ open: false })} />
       <ConfirmDialog
@@ -390,30 +401,30 @@ function LogCard({ events }: { events: Record<string, string> }) {
   return (
     <Card title="Histórico de envios" icon={History} bodyClass="">
       {log.isLoading ? <TableSkeleton cols={4} rows={4} /> : !log.data?.rows.length ? <Empty icon={History}>Nenhuma mensagem enviada ainda.</Empty> : (
-        <div className="overflow-x-auto">
-          <table className="tbl">
-            <thead><tr><th>Quando</th><th>Destinatário</th><th>Assunto</th><th>Resultado</th></tr></thead>
-            <tbody>
-              {log.data.rows.map((r: any) => (
-                <tr key={r.id} className="cursor-pointer" onClick={() => setOpen(r)}>
-                  <td className="whitespace-nowrap text-xs">{fmtDateTime(r.at)}</td>
-                  <td>{r.recipient_name}<div className="mono">{r.target}</div></td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
-                      {r.events.map((e: string) => <Badge key={e}>{e === 'test' ? 'Teste' : events[e] ?? e}</Badge>)}
-                    </div>
-                  </td>
-                  <td>
-                    {r.success
-                      ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="size-3.5" /> Enviado{r.attempts > 1 ? ` (${r.attempts} tentativas)` : ''}</span>
-                      : <span className="inline-flex items-center gap-1 text-xs text-red-700" title={r.error}><XCircle className="size-3.5" /> Falhou</span>}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <>
+          <DataList
+            rows={log.data.rows}
+            rowKey={(r: any) => r.id}
+            onRowClick={setOpen}
+            accent={(r: any) => (r.success ? 'green' : 'red')}
+            cols={[
+              { key: 'to', header: 'Destinatário', mobile: 'title', cell: (r: any) => <div>{r.recipient_name}<div className="mono font-normal">{r.target}</div></div> },
+              { key: 'at', header: 'Quando', mobile: 'subtitle', td: 'whitespace-nowrap text-xs', cell: (r: any) => <span className="text-xs">{fmtDateTime(r.at)}</span> },
+              {
+                key: 'events', header: 'Assunto', mobile: 'badges',
+                cell: (r: any) => <div className="flex flex-wrap gap-1">{r.events.map((e: string) => <Badge key={e}>{e === 'test' ? 'Teste' : events[e] ?? e}</Badge>)}</div>,
+              },
+              {
+                key: 'result', header: 'Resultado', mobile: 'badges',
+                cell: (r: any) => r.success
+                  ? <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="size-3.5" /> Enviado{r.attempts > 1 ? ` (${r.attempts} tentativas)` : ''}</span>
+                  : <span className="inline-flex items-center gap-1 text-xs text-red-700" title={r.error}><XCircle className="size-3.5" /> Falhou</span>,
+              },
+            ]}
+          />
+
           <Pagination page={log.data.page} pageSize={log.data.page_size} total={log.data.total} onPage={setPage} />
-        </div>
+        </>
       )}
       <Modal open={!!open} onClose={() => setOpen(null)} title="Mensagem enviada" description={open && `${fmtDateTime(open.at)} · ${open.recipient_name}`}>
         {open && (

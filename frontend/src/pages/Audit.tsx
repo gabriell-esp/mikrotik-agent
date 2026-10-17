@@ -20,12 +20,12 @@ function AuditCard({ to, icon: Icon, iconTone, title, subtitle, badge, s }: {
   to: string; icon: LucideIcon; iconTone: string; title: ReactNode; subtitle: ReactNode; badge?: ReactNode; s: any;
 }) {
   return (
-    <Link to={to} className="group flex flex-col rounded-xl border border-slate-200/80 bg-white p-5 shadow-xs transition hover:border-brand-300 hover:shadow-md">
+    <Link to={to} className="group flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition hover:border-brand-300 hover:shadow-md active:scale-[0.99] sm:rounded-xl sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
           <div className={clsx('flex size-10 shrink-0 items-center justify-center rounded-xl', iconTone)}><Icon className="size-5" /></div>
           <div className="min-w-0">
-            <div className="truncate font-semibold text-slate-900">{title}</div>
+            <div className="line-clamp-2 font-semibold leading-snug text-slate-900 sm:truncate">{title}</div>
             <div className="truncate text-xs text-slate-500">{subtitle}</div>
           </div>
         </div>
