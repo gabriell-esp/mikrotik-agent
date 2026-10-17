@@ -8,9 +8,12 @@ import { get } from '../lib/api';
 
 function Metric({ icon: Icon, label, value, tone }: { icon: typeof Users; label: string; value: number; tone?: string }) {
   return (
-    <div className="rounded-lg bg-slate-50 px-3 py-2">
-      <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-500"><Icon className="size-3.5" />{label}</div>
-      <div className={clsx('mt-0.5 text-lg font-semibold tabular-nums', tone ?? 'text-slate-800')}>{value}</div>
+    <div className="min-w-0 rounded-xl bg-slate-50 px-2.5 py-2 text-center sm:px-3 sm:text-left">
+      <div className={clsx('text-lg leading-tight font-semibold tabular-nums sm:order-last sm:mt-0.5', tone ?? 'text-slate-800')}>{value}</div>
+      <div className="flex items-center justify-center gap-1.5 truncate text-[11px] font-medium text-slate-500 sm:justify-start">
+        <Icon className="hidden size-3.5 shrink-0 sm:block" />
+        <span className="truncate">{label}</span>
+      </div>
     </div>
   );
 }
@@ -63,29 +66,34 @@ export default function PppoePage() {
       ) : list.length === 0 ? (
         <div className="rounded-xl border border-slate-200/80 bg-white"><Empty icon={Network}>Nenhuma MikroTik de cliente com PPPoE encontrada.</Empty></div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {list.map((d: any) => (
             <Link
               key={d.device_id}
               to={`/pppoe/${d.device_id}`}
               className="group flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition hover:border-brand-300 hover:shadow-md active:scale-[0.99] sm:rounded-xl sm:p-5"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Building className="size-5" /></div>
-                  <div className="min-w-0">
-                    <div className="line-clamp-2 font-semibold leading-snug text-slate-900 sm:truncate">{d.client_name ?? 'Sem cliente'}</div>
-                    <div className="flex items-center gap-1.5 truncate text-xs text-slate-500"><Router className="size-3.5" />{d.device_name} · <span className="mono">{d.host}</span></div>
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600"><Building className="size-5" /></div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="line-clamp-2 min-w-0 font-semibold leading-snug break-words text-slate-900">{d.client_name ?? 'Sem cliente'}</div>
+                    <span className="hidden shrink-0 sm:block"><DeviceStatusBadge status={d.device_status} title={d.status_message} /></span>
                   </div>
+                  <div className="mt-1 sm:hidden"><DeviceStatusBadge status={d.device_status} title={d.status_message} /></div>
+                  <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+                    <Router className="size-3.5 shrink-0" />
+                    <span className="min-w-0 truncate">{d.device_name}</span>
+                  </div>
+                  <div className="mono mt-0.5 truncate pl-5 text-slate-400">{d.host}</div>
                 </div>
-                <DeviceStatusBadge status={d.device_status} title={d.status_message} />
               </div>
 
               {d.has_pppoe ? (
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   <Metric icon={Users} label="Usuários" value={d.secrets_total} />
                   <Metric icon={UserCheck} label="Online" value={d.online} tone="text-emerald-700" />
-                  <Metric icon={UserX} label="Desabilitados" value={d.secrets_disabled} tone={d.secrets_disabled ? 'text-red-700' : undefined} />
+                  <Metric icon={UserX} label="Bloqueados" value={d.secrets_disabled} tone={d.secrets_disabled ? 'text-red-700' : undefined} />
                 </div>
               ) : (
                 <div className="mt-4 rounded-lg bg-slate-50 px-3 py-4 text-center text-xs text-slate-500">
@@ -94,11 +102,11 @@ export default function PppoePage() {
               )}
 
               <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                <span className="flex min-w-0 items-center gap-1.5 truncate">
+                <span className="flex min-w-0 items-center gap-1.5 truncate [&>*]:shrink-0">
                   {d.stale ? <AlertTriangle className="size-3.5 shrink-0 text-amber-500" /> : null}
                   {d.servers.length ? `Servidor em ${d.servers.join(', ')}` : 'Dados da coleta'} · <TimeAgo date={d.collectedAt} never="sem coleta" />
                 </span>
-                <span className="flex items-center gap-1 font-medium text-brand-700 opacity-0 transition group-hover:opacity-100">Gerenciar <ArrowRight className="size-3.5" /></span>
+                <span className="flex shrink-0 items-center gap-1 font-medium text-brand-700 sm:opacity-0 sm:transition sm:group-hover:opacity-100"><span className="max-sm:hidden">Gerenciar</span> <ArrowRight className="size-4 sm:size-3.5" /></span>
               </div>
             </Link>
           ))}

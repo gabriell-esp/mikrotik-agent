@@ -238,7 +238,7 @@ export default function Layout() {
             </div>
           </div>
         </header>
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
           <div className="mx-auto max-w-[1600px] px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:p-8">
             <Outlet />
           </div>
