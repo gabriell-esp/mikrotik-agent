@@ -183,6 +183,14 @@ describe('acesso por API key (Integration API oficial)', () => {
     expect((await call('PUT', `${base}/wlans/${wl.body.rows[0].id}`, { enabled: false, name: 'Condominio' })).status).toBe(200);
     expect(os.data.default.wlans[0].enabled).toBe(false);
     expect(os.data.default.wlans[0].x_passphrase).toBe('SENHA-WIFI-SECRETA');
+
+    // Trocar para usuário/senha muda o identificador do site (uuid → "default"): o resumo não pode somar os dois.
+    const sw = await call('PUT', `/api/unifi/controllers/${ids.api}`, { name: 'Cloud Key API', client_id: ids.client, url, auth_type: 'password', username: os.username, password: os.password });
+    expect(sw.status, JSON.stringify(sw.body)).toBe(200);
+    const ref2 = await call('POST', `/api/unifi/controllers/${ids.api}/refresh`);
+    expect(ref2.body.controller.summary).toMatchObject({ devices: 2, online: 1, offline: 1 });
+    const left = await q.query('SELECT DISTINCT site FROM unifi_cache WHERE controller_id = $1', [ids.api]);
+    expect(left.map((r: any) => r.site).sort()).toEqual(['', 'default']);
   });
 
   it('Network 9.x: sem redes Wi-Fi pela API key, o resto funciona', async () => {

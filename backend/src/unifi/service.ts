@@ -380,6 +380,11 @@ export async function readCache(id: number, site: string, kind: CacheKind) {
   };
 }
 
+/** Remove do cache os sites que a controladora não informa mais (site excluído ou troca de forma de acesso). */
+async function pruneSites(id: number, sites: { name: string }[]) {
+  await query("DELETE FROM unifi_cache WHERE controller_id = $1 AND site <> '' AND NOT (site = ANY($2::text[]))", [id, sites.map((s) => s.name)]);
+}
+
 /** Lê tudo da controladora (todos os sites) e atualiza o cache. Somente leitura. */
 export async function refreshController(c: ControllerRow): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -394,11 +399,13 @@ export async function refreshController(c: ControllerRow): Promise<{ ok: boolean
           await saveCache(c.id, s.name, 'clients', data.clients);
           if (data.wlans) await saveCache(c.id, s.name, 'wlans', data.wlans);
         }
+        await pruneSites(c.id, sites);
         return;
       }
       const sites = (await api.sites()).map((s) => ({ name: s.name, desc: s.desc || s.name, role: s.role ?? null }));
       if (sites.length) await api.sysinfo(sites[0].name).catch(() => undefined);
       await saveCache(c.id, '', 'sites', sites);
+      await pruneSites(c.id, sites);
       for (const s of sites) {
         const [devs, stas, wlans, health, known] = await Promise.all([
           api.devices(s.name),
@@ -432,8 +439,10 @@ export async function refreshController(c: ControllerRow): Promise<{ ok: boolean
 export async function controllerSummary(id: number) {
   const rows = await query('SELECT site, kind, data FROM unifi_cache WHERE controller_id = $1 AND data IS NOT NULL', [id]);
   const sites = rows.find((r) => r.site === '' && r.kind === 'sites')?.data ?? [];
+  const current = new Set(sites.map((s: any) => s.name));
   let devices = 0, online = 0, offline = 0, pending = 0, upgradable = 0, aps = 0, clients = 0;
   for (const r of rows) {
+    if (r.site !== '' && !current.has(r.site)) continue; // sobra de site que não existe mais
     if (r.kind === 'devices') {
       for (const d of r.data) {
         devices++;
