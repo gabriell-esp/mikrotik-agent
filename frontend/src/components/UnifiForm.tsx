@@ -10,13 +10,14 @@ export interface UnifiInitial {
   name?: string;
   client_id?: number | null;
   url?: string;
-  username?: string;
+  auth_type?: 'password' | 'apikey';
+  username?: string | null;
   tls_fingerprint?: string | null;
   notes?: string | null;
   poll_enabled?: boolean;
 }
 
-const empty = { name: '', client_id: null as number | null, url: '', username: '', password: '', tls_fingerprint: '', notes: '', poll_enabled: true };
+const empty = { name: '', client_id: null as number | null, url: '', auth_type: 'password' as 'password' | 'apikey', username: '', password: '', tls_fingerprint: '', notes: '', poll_enabled: true };
 
 /** Cadastro/edição de controladora UniFi, com teste de conexão (somente leitura). */
 export default function UnifiForm({ open, onClose, initial, onSaved }: { open: boolean; onClose: () => void; initial?: UnifiInitial; onSaved?: (c: any) => void }) {
@@ -39,7 +40,9 @@ export default function UnifiForm({ open, onClose, initial, onSaved }: { open: b
   }, [open, initial]);
 
   const set = <K extends keyof typeof empty>(k: K, v: (typeof empty)[K]) => setF((x) => ({ ...x, [k]: v }));
-  const conn = () => ({ url: f.url, username: f.username, tls_fingerprint: f.tls_fingerprint || null });
+  const apikey = f.auth_type === 'apikey';
+  const authChanged = editing && (initial?.auth_type ?? 'password') !== f.auth_type;
+  const conn = () => ({ url: f.url, auth_type: f.auth_type, username: apikey ? null : f.username, tls_fingerprint: f.tls_fingerprint || null });
 
   const runTest = async () => {
     setTesting(true);
@@ -79,7 +82,7 @@ export default function UnifiForm({ open, onClose, initial, onSaved }: { open: b
       description="Cloud Key, UDM ou UniFi Network Application acessível pelo servidor (normalmente pelo túnel WireGuard)."
       footer={
         <>
-          <Button onClick={runTest} loading={testing} disabled={!f.url || !f.username || (!f.password && !editing)}>
+          <Button onClick={runTest} loading={testing} disabled={!f.url || (!apikey && !f.username) || (!f.password && (!editing || authChanged))}>
             <PlugZap className="size-4" /> Testar
           </Button>
           <Button onClick={onClose}>Cancelar</Button>
@@ -102,11 +105,38 @@ export default function UnifiForm({ open, onClose, initial, onSaved }: { open: b
           <Field label="Endereço da controladora" className="sm:col-span-2" hint="Cloud Key Gen2/UniFi OS: https://IP (porta 443). Controlador antigo: https://IP:8443.">
             <Input value={f.url} onChange={(e) => set('url', e.target.value.trim())} placeholder="https://10.200.0.5" className="mono" autoCapitalize="none" autoCorrect="off" />
           </Field>
-          <Field label="Usuário" hint="Usuário local da controladora, sem verificação em duas etapas.">
-            <Input value={f.username} onChange={(e) => set('username', e.target.value)} autoComplete="off" autoCapitalize="none" />
+          <Field label="Forma de acesso" className="sm:col-span-2">
+            <div className="grid grid-cols-2 gap-2">
+              {([['password', 'Usuário e senha', 'Todas as ações'], ['apikey', 'API key', 'API oficial · Network 9+']] as const).map(([k, l, d]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => set('auth_type', k)}
+                  className={`rounded-xl border px-3 py-2 text-left transition ${f.auth_type === k ? 'border-brand-600 bg-brand-50 ring-1 ring-brand-600' : 'border-slate-200 bg-white hover:border-slate-300'}`}
+                >
+                  <span className="block text-sm font-medium text-slate-900">{l}</span>
+                  <span className="block text-xs text-slate-500">{d}</span>
+                </button>
+              ))}
+            </div>
           </Field>
-          <Field label="Senha" hint={editing ? 'Deixe em branco para manter a atual.' : 'Armazenada criptografada; nunca é exibida.'}>
-            <Input type="password" value={f.password} onChange={(e) => set('password', e.target.value)} autoComplete="new-password" />
+          {!apikey && (
+            <Field label="Usuário" hint="Usuário local da controladora, sem verificação em duas etapas.">
+              <Input value={f.username ?? ''} onChange={(e) => set('username', e.target.value)} autoComplete="off" autoCapitalize="none" />
+            </Field>
+          )}
+          <Field
+            label={apikey ? 'API key' : 'Senha'}
+            className={apikey ? 'sm:col-span-2' : undefined}
+            hint={
+              editing && !authChanged
+                ? 'Deixe em branco para manter a atual.'
+                : apikey
+                  ? 'Crie em UniFi Network → Configurações → Control Plane → Integrações → Criar API Key. Armazenada criptografada; nunca é exibida.'
+                  : 'Armazenada criptografada; nunca é exibida.'
+            }
+          >
+            <Input type="password" value={f.password} onChange={(e) => set('password', e.target.value)} autoComplete="new-password" className={apikey ? 'mono' : undefined} />
           </Field>
           <Field label="Fingerprint SHA-256 do certificado (opcional)" className="sm:col-span-2" hint="Se informado, a conexão só é aceita se o certificado da controladora conferir.">
             <Input value={f.tls_fingerprint ?? ''} onChange={(e) => set('tls_fingerprint', e.target.value)} className="mono" placeholder="AB:CD:…" />
@@ -124,6 +154,12 @@ export default function UnifiForm({ open, onClose, initial, onSaved }: { open: b
               <div>
                 Conectado em {test.ms} ms · {test.platform === 'unifios' ? 'UniFi OS' : 'controlador clássico'}{test.version ? ` · Network ${test.version}` : ''}
                 <div className="text-xs">Sites: {test.sites.map((s: any) => s.desc).join(', ') || 'nenhum'}</div>
+                {test.auth_type === 'apikey' && (
+                  <div className="mt-1 text-xs">
+                    Pela API key: reiniciar antenas{test.capabilities?.wlanToggle ? ', ativar/desativar redes Wi-Fi' : ''}. Localizar, atualizar firmware e bloquear clientes só com usuário e senha.
+                    {!test.capabilities?.wlans && ' Redes Wi-Fi exigem UniFi Network 10 ou superior.'}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

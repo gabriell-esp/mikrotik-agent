@@ -29,7 +29,7 @@ interface Resp {
   json: any;
 }
 
-const NET_ERRORS: Record<string, [UnifiErrorKind, string]> = {
+export const NET_ERRORS: Record<string, [UnifiErrorKind, string]> = {
   ECONNREFUSED: ['refused', 'Conexão recusada (serviço desativado ou porta errada).'],
   EHOSTUNREACH: ['unreachable', 'Controladora inalcançável pela rede.'],
   ENETUNREACH: ['unreachable', 'Controladora inalcançável pela rede.'],

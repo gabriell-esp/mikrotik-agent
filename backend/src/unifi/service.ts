@@ -5,13 +5,17 @@ import { notFound } from '../lib/errors.js';
 import { secretBox } from '../lib/secrets.js';
 import { Semaphore } from '../lib/semaphore.js';
 import { UnifiClient, UnifiError } from './client.js';
+import { UnifiIntegrationClient } from './integration.js';
+
+export type UnifiApi = UnifiClient | UnifiIntegrationClient;
 
 export interface ControllerRow {
   id: number;
   client_id: number | null;
   name: string;
   url: string;
-  username: string;
+  auth_type: 'password' | 'apikey';
+  username: string | null;
   password_enc: string;
   tls_fingerprint: string | null;
   platform: 'unifios' | 'legacy' | null;
@@ -32,30 +36,34 @@ export async function getController(id: number): Promise<ControllerRow> {
 
 interface Session {
   key: string;
-  client: UnifiClient;
+  client: UnifiApi;
 }
 const sessions = new Map<number, Session>();
 const limits = new Map<number, Semaphore>();
 const globalLimit = new Semaphore(config.ros.maxConcurrent);
 
 function sessionKey(c: ControllerRow): string {
-  return createHash('sha256').update([c.url, c.username, c.password_enc, c.tls_fingerprint ?? ''].join('|')).digest('hex');
+  return createHash('sha256').update([c.auth_type, c.url, c.username ?? '', c.password_enc, c.tls_fingerprint ?? ''].join('|')).digest('hex');
 }
 
 function decryptPassword(c: ControllerRow): string {
   try {
     return secretBox().decrypt(c.password_enc);
   } catch {
-    throw new UnifiError('auth', `Não foi possível decifrar a senha salva de "${c.name}" (chave mestra diferente da usada no cadastro). Salve a senha novamente.`);
+    const what = c.auth_type === 'apikey' ? 'a API key salva' : 'a senha salva';
+    throw new UnifiError('auth', `Não foi possível decifrar ${what} de "${c.name}" (chave mestra diferente da usada no cadastro). Salve-a novamente.`);
   }
 }
 
-function sessionFor(c: ControllerRow): UnifiClient {
+function sessionFor(c: ControllerRow): UnifiApi {
   const key = sessionKey(c);
   const cur = sessions.get(c.id);
   if (cur && cur.key === key) return cur.client;
   cur?.client.close();
-  const client = new UnifiClient({ url: c.url, username: c.username, password: decryptPassword(c), tlsFingerprint: c.tls_fingerprint, platform: c.platform });
+  const secret = decryptPassword(c);
+  const client: UnifiApi = c.auth_type === 'apikey'
+    ? new UnifiIntegrationClient({ url: c.url, apiKey: secret, tlsFingerprint: c.tls_fingerprint, platform: c.platform })
+    : new UnifiClient({ url: c.url, username: c.username ?? '', password: secret, tlsFingerprint: c.tls_fingerprint, platform: c.platform });
   sessions.set(c.id, { key, client });
   return client;
 }
@@ -85,7 +93,7 @@ async function setStatus(id: number, status: ControllerStatus, message: string |
  * Executa operações na controladora com limite de concorrência, sessão reaproveitada
  * e status de conexão atualizado conforme o resultado.
  */
-export async function withController<T>(c: ControllerRow, fn: (api: UnifiClient) => Promise<T>): Promise<T> {
+export async function withController<T>(c: ControllerRow, fn: (api: UnifiApi) => Promise<T>): Promise<T> {
   let lim = limits.get(c.id);
   if (!lim) limits.set(c.id, (lim = new Semaphore(1)));
   const releaseCtrl = await lim.acquire();
@@ -113,6 +121,17 @@ export async function withController<T>(c: ControllerRow, fn: (api: UnifiClient)
     releaseGlobal();
     releaseCtrl();
   }
+}
+
+// ------------------------------------------------------------------ capacidades
+
+/** O que cada modo de acesso permite (a Integration API oficial ainda tem menos ações). */
+export function capabilities(c: Pick<ControllerRow, 'auth_type' | 'version'>) {
+  if (c.auth_type === 'apikey') {
+    const major = Number(String(c.version ?? '').split('.')[0]) || 0;
+    return { restart: true, locate: false, upgrade: false, kick: false, block: false, blockedList: false, wlans: major >= 10, wlanToggle: major >= 10, signal: false };
+  }
+  return { restart: true, locate: true, upgrade: true, kick: true, block: true, blockedList: true, wlans: true, wlanToggle: true, signal: true };
 }
 
 // ------------------------------------------------------------------ normalização
@@ -206,6 +225,127 @@ export function normalizeWlan(w: any, clientsBySsid: Map<string, number>) {
   };
 }
 
+const INT_STATE: Record<string, string> = {
+  ONLINE: 'online', OFFLINE: 'offline', PENDING_ADOPTION: 'pending', UPDATING: 'upgrading', GETTING_READY: 'provisioning',
+  ADOPTING: 'adopting', DELETING: 'deleting', CONNECTION_INTERRUPTED: 'heartbeat_missed', ISOLATED: 'isolated',
+};
+
+const ghz = (f?: string | number | null) => (f == null ? null : `${String(f).replace('.', ',')} GHz`);
+
+/** Dispositivo da Integration API (lista + detalhes + estatísticas) no mesmo formato do modo usuário/senha. */
+export function normalizeIntegrationDevice(d: any, details: any, stats: any, clients: number) {
+  const features: string[] = Array.isArray(d.features) ? d.features : Object.keys(details?.features ?? {});
+  const type = features.includes('accessPoint') ? 'uap' : features.includes('gateway') ? 'ugw' : features.includes('switching') ? 'usw' : null;
+  return {
+    id: d.id,
+    mac: String(d.macAddress ?? '').toLowerCase(),
+    name: d.name || MODELS[d.model] || d.model || d.macAddress,
+    model: d.model ?? null,
+    model_name: MODELS[d.model] ?? d.model ?? null,
+    type,
+    ip: d.ipAddress ?? null,
+    version: details?.firmwareVersion ?? null,
+    state: INT_STATE[d.state] ?? String(d.state ?? 'unknown').toLowerCase(),
+    adopted: true,
+    uptime: stats?.uptimeSec ?? null,
+    clients,
+    upgradable: !!details?.firmwareUpdatable,
+    upgrade_to: null,
+    locating: false,
+    satisfaction: null,
+    cpu: stats?.cpuUtilizationPct ?? null,
+    memory: stats?.memoryUtilizationPct ?? null,
+    last_seen: stats?.lastHeartbeatAt ?? null,
+    uplink: null,
+    tx_bytes: null,
+    rx_bytes: null,
+    radios: (details?.interfaces?.radios ?? []).map((r: any) => ({
+      name: `${r.frequencyGHz}`,
+      band: ghz(r.frequencyGHz),
+      channel: r.channel ?? null,
+      tx_power: null,
+      width: r.channelWidthMHz ?? null,
+      standard: r.wlanStandard ?? null,
+      clients: null,
+      utilization: null,
+      satisfaction: null,
+    })),
+  };
+}
+
+export function normalizeIntegrationClient(c: any, apNames: Map<string, string>) {
+  const connected = c.connectedAt ? (Date.now() - new Date(c.connectedAt).getTime()) / 1000 : null;
+  return {
+    id: c.id,
+    mac: String(c.macAddress ?? '').toLowerCase(),
+    name: c.name || c.macAddress,
+    hostname: null,
+    vendor: null,
+    ip: c.ipAddress ?? null,
+    ap_mac: null,
+    ap_name: c.uplinkDeviceId ? apNames.get(c.uplinkDeviceId) ?? null : null,
+    essid: null,
+    signal: null,
+    band: null,
+    channel: null,
+    tx_rate: null,
+    rx_rate: null,
+    uptime: connected != null && connected >= 0 ? Math.round(connected) : null,
+    rx_bytes: null,
+    tx_bytes: null,
+    wired: c.type === 'WIRED',
+    guest: !!c.access?.type && c.access.type !== 'DEFAULT',
+    satisfaction: null,
+  };
+}
+
+const SEC: Record<string, [string, string]> = {
+  OPEN: ['open', ''], WPA2_PERSONAL: ['wpapsk', 'wpa2'], WPA3_PERSONAL: ['wpapsk', 'wpa3'], WPA2_WPA3_PERSONAL: ['wpapsk', 'wpa2/wpa3'],
+  WPA2_ENTERPRISE: ['wpaeap', 'wpa2'], WPA3_ENTERPRISE: ['wpaeap', 'wpa3'], WPA2_WPA3_ENTERPRISE: ['wpaeap', 'wpa2/wpa3'],
+};
+
+export function normalizeIntegrationWifi(w: any) {
+  const [security, wpa_mode] = SEC[w.securityConfiguration?.type] ?? [w.securityConfiguration?.type?.toLowerCase() ?? null, null];
+  return {
+    id: w.id,
+    name: w.name,
+    enabled: w.enabled !== false,
+    security,
+    wpa_mode,
+    guest: !!w.hotspotConfiguration,
+    hidden: !!w.hideName,
+    band: (w.broadcastingFrequenciesGHz ?? []).map(ghz).join(', ') || null,
+    vlan: null,
+    clients: null as number | null,
+  };
+}
+
+/** Leitura completa de um site pela Integration API. */
+async function readIntegrationSite(api: UnifiIntegrationClient, site: string) {
+  const [devs, cls, wifi] = await Promise.all([
+    api.devices(site),
+    api.clients(site),
+    api.wifiBroadcasts(site).catch((e) => (e instanceof UnifiError && e.kind === 'command' ? null : Promise.reject(e))),
+  ]);
+  const perAp = new Map<string, number>();
+  for (const c of cls) if (c.uplinkDeviceId) perAp.set(c.uplinkDeviceId, (perAp.get(c.uplinkDeviceId) ?? 0) + 1);
+  // Detalhes e estatísticas por dispositivo, com no máximo 4 consultas simultâneas.
+  const devices: any[] = new Array(devs.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, devs.length) }, async () => {
+    while (next < devs.length) {
+      const i = next++;
+      const d = devs[i];
+      const details = await api.device(site, d.id).catch(() => null);
+      const stats = d.state === 'ONLINE' ? await api.deviceStats(site, d.id).catch(() => null) : null;
+      devices[i] = normalizeIntegrationDevice(d, details, stats, perAp.get(d.id) ?? 0);
+    }
+  }));
+  const apNames = new Map(devs.map((d: any) => [d.id, d.name || d.model || d.macAddress] as [string, string]));
+  const clients = cls.map((c) => normalizeIntegrationClient(c, apNames));
+  return { devices, clients, wlans: wifi ? wifi.map(normalizeIntegrationWifi) : null };
+}
+
 // ------------------------------------------------------------------ cache
 
 export type CacheKind = 'sites' | 'devices' | 'clients' | 'wlans' | 'blocked' | 'health';
@@ -244,6 +384,18 @@ export async function readCache(id: number, site: string, kind: CacheKind) {
 export async function refreshController(c: ControllerRow): Promise<{ ok: boolean; error?: string }> {
   try {
     await withController(c, async (api) => {
+      if (api instanceof UnifiIntegrationClient) {
+        await api.info();
+        const sites = (await api.sites()).map((s) => ({ name: s.id, desc: s.name || s.internalReference || s.id, ref: s.internalReference ?? null }));
+        await saveCache(c.id, '', 'sites', sites);
+        for (const s of sites) {
+          const data = await readIntegrationSite(api, s.name);
+          await saveCache(c.id, s.name, 'devices', data.devices);
+          await saveCache(c.id, s.name, 'clients', data.clients);
+          if (data.wlans) await saveCache(c.id, s.name, 'wlans', data.wlans);
+        }
+        return;
+      }
       const sites = (await api.sites()).map((s) => ({ name: s.name, desc: s.desc || s.name, role: s.role ?? null }));
       if (sites.length) await api.sysinfo(sites[0].name).catch(() => undefined);
       await saveCache(c.id, '', 'sites', sites);

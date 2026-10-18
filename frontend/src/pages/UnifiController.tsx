@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { Ban, ChevronRight, Download, LocateFixed, LocateOff, Pencil, Power, PowerOff, RefreshCw, RotateCw, ScrollText, Trash2, Unlock, UserX, Wifi } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import DataList from '../components/DataList';
+import DataList, { type Col } from '../components/DataList';
 import RowActions from '../components/RowActions';
 import UnifiForm from '../components/UnifiForm';
 import {
@@ -49,18 +49,22 @@ interface Confirm {
   run: () => Promise<unknown>;
 }
 
-function useSiteData(id: number, site: string, kind: string) {
+/** O que a controladora permite (o acesso por API key tem menos ações que usuário/senha). */
+export type Caps = Record<'restart' | 'locate' | 'upgrade' | 'kick' | 'block' | 'blockedList' | 'wlans' | 'wlanToggle' | 'signal', boolean>;
+const ALL_CAPS: Caps = { restart: true, locate: true, upgrade: true, kick: true, block: true, blockedList: true, wlans: true, wlanToggle: true, signal: true };
+
+function useSiteData(id: number, site: string, kind: string, on = true) {
   return useQuery({
     queryKey: ['unifi', id, site, kind],
     queryFn: () => get(`/unifi/controllers/${id}/sites/${site}/${kind}`),
-    enabled: !!site,
+    enabled: !!site && on,
     placeholderData: keepPreviousData,
   });
 }
 
 // ------------------------------------------------------------- dispositivos
 
-function Devices({ id, site, ask }: { id: number; site: string; ask: (c: Confirm) => void }) {
+function Devices({ id, site, ask, caps }: { id: number; site: string; ask: (c: Confirm) => void; caps: Caps }) {
   const { can } = useAuth();
   const q = useSiteData(id, site, 'devices');
   const [search, setSearch] = useState('');
@@ -107,7 +111,15 @@ function Devices({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
                 ) : <span className="text-slate-300">—</span>,
               },
               { key: 'version', header: 'Firmware', cell: (d: any) => <span className="text-xs">{d.version ?? '—'}</span> },
-              { key: 'uptime', header: 'Ligado há', cell: (d: any) => <span className="text-xs">{d.state === 'online' && d.uptime != null ? fmtDuration(d.uptime) : '—'}</span> },
+              {
+                key: 'uptime', header: 'Ligado há',
+                cell: (d: any) => (
+                  <span className="text-xs">
+                    {d.state === 'online' && d.uptime != null ? fmtDuration(d.uptime) : '—'}
+                    {d.cpu != null && <span className="block text-slate-500">CPU {Math.round(d.cpu)}%{d.memory != null ? ` · mem. ${Math.round(d.memory)}%` : ''}</span>}
+                  </span>
+                ),
+              },
               {
                 key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
                 cell: (d: any) => (
@@ -115,15 +127,15 @@ function Devices({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
                     title={d.name}
                     actions={[
                       {
-                        icon: d.locating ? LocateOff : LocateFixed, label: d.locating ? 'Parar de localizar' : 'Localizar (piscar LED)', show: can('unifi.control') && d.state === 'online',
+                        icon: d.locating ? LocateOff : LocateFixed, label: d.locating ? 'Parar de localizar' : 'Localizar (piscar LED)', show: caps.locate && can('unifi.control') && d.state === 'online',
                         onClick: () => ask({ title: d.locating ? 'Parar de localizar' : 'Localizar dispositivo', label: 'Confirmar', danger: false, message: <>O LED de <b>{d.name}</b> {d.locating ? 'volta ao normal' : 'vai piscar para facilitar encontrar o equipamento'}.</>, run: () => act(d, d.locating ? 'unlocate' : 'locate') }),
                       },
                       {
-                        icon: RotateCw, label: 'Reiniciar', tone: 'warning', show: can('unifi.control') && d.state !== 'offline',
+                        icon: RotateCw, label: 'Reiniciar', tone: 'warning', show: caps.restart && can('unifi.control') && d.state !== 'offline',
                         onClick: () => ask({ title: 'Reiniciar dispositivo', label: 'Reiniciar', message: <>Reiniciar <b>{d.name}</b>? Os {d.clients} cliente(s) conectados ficam sem Wi-Fi por cerca de 1 a 3 minutos.</>, run: () => act(d, 'restart') }),
                       },
                       {
-                        icon: Download, label: `Atualizar firmware${d.upgrade_to ? ` (${d.upgrade_to})` : ''}`, short: 'Atualizar firmware', show: can('unifi.control') && d.upgradable,
+                        icon: Download, label: `Atualizar firmware${d.upgrade_to ? ` (${d.upgrade_to})` : ''}`, short: 'Atualizar firmware', show: caps.upgrade && can('unifi.control') && d.upgradable,
                         onClick: () => ask({ title: 'Atualizar firmware', label: 'Atualizar', message: <>Atualizar <b>{d.name}</b> de {d.version} para {d.upgrade_to ?? 'a versão mais recente'}? O dispositivo reinicia durante a atualização (alguns minutos sem Wi-Fi).</>, run: () => act(d, 'upgrade') }),
                       },
                     ]}
@@ -141,10 +153,10 @@ function Devices({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
 
 // ------------------------------------------------------------- clientes
 
-function Clients({ id, site, ask }: { id: number; site: string; ask: (c: Confirm) => void }) {
+function Clients({ id, site, ask, caps }: { id: number; site: string; ask: (c: Confirm) => void; caps: Caps }) {
   const { can } = useAuth();
   const q = useSiteData(id, site, 'clients');
-  const blocked = useSiteData(id, site, 'blocked');
+  const blocked = useSiteData(id, site, 'blocked', caps.blockedList);
   const [search, setSearch] = useState('');
   const rows = useMemo(() => {
     const t = search.toLowerCase();
@@ -163,15 +175,15 @@ function Clients({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
             <DataList
               rows={paged.slice}
               rowKey={(c: any) => c.mac}
-              accent={(c: any) => (c.wired ? 'slate' : signalTone(c.signal))}
-              cols={[
+              accent={(c: any) => (c.wired ? 'slate' : caps.signal ? signalTone(c.signal) : 'blue')}
+              cols={([
                 { key: 'name', header: 'Cliente', mobile: 'title', cell: (c: any) => <div><span className="font-medium text-slate-900">{c.name}</span>{c.vendor && c.vendor !== c.name && <span className="block text-xs font-normal text-slate-500">{c.vendor}</span>}</div> },
                 { key: 'ip', header: 'IP / MAC', mobile: 'subtitle', cell: (c: any) => <span className="mono">{c.ip ?? '—'}<span className="max-md:before:content-['_·_'] md:block">{c.mac}</span></span> },
                 {
-                  key: 'signal', header: 'Sinal', mobile: 'badges',
+                  key: 'signal', header: caps.signal ? 'Sinal' : 'Conexão', mobile: 'badges',
                   cell: (c: any) => c.wired ? <Badge>Cabo</Badge> : (
                     <div className="flex flex-wrap gap-1">
-                      <Badge color={signalTone(c.signal)} dot>{c.signal != null ? `${c.signal} dBm` : 'sinal —'}</Badge>
+                      {caps.signal ? <Badge color={signalTone(c.signal)} dot>{c.signal != null ? `${c.signal} dBm` : 'sinal —'}</Badge> : <Badge color="blue">Wi-Fi</Badge>}
                       {c.band && <Badge>{c.band}</Badge>}
                       {c.guest && <Badge color="purple">Visitante</Badge>}
                     </div>
@@ -184,31 +196,31 @@ function Clients({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
                 { key: 'uptime', header: 'Conectado há', cell: (c: any) => <span className="text-xs">{c.uptime != null ? fmtDuration(c.uptime) : '—'}</span> },
                 { key: 'traffic', header: 'Tráfego', mobile: 'hide', cell: (c: any) => <span className="text-xs whitespace-nowrap">↓ {fmtBytes(c.tx_bytes)} · ↑ {fmtBytes(c.rx_bytes)}</span> },
                 {
-                  key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
+                  key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right', hidden: !caps.kick && !caps.block,
                   cell: (c: any) => (
                     <RowActions
                       title={c.name}
                       actions={[
                         {
-                          icon: RefreshCw, label: 'Reconectar', show: can('unifi.control') && !c.wired,
+                          icon: RefreshCw, label: 'Reconectar', show: caps.kick && can('unifi.control') && !c.wired,
                           onClick: () => ask({ title: 'Reconectar cliente', label: 'Reconectar', danger: false, message: <>Desconectar <b>{c.name}</b> do Wi-Fi? O aparelho normalmente se reconecta sozinho em segundos.</>, run: () => act(c, 'kick') }),
                         },
                         {
-                          icon: Ban, label: 'Bloquear', tone: 'danger', show: can('unifi.control'),
+                          icon: Ban, label: 'Bloquear', tone: 'danger', show: caps.block && can('unifi.control'),
                           onClick: () => ask({ title: 'Bloquear cliente', label: 'Bloquear', message: <>Bloquear <b>{c.name}</b> ({c.mac})? O aparelho não conseguirá mais se conectar em nenhuma rede desta controladora até ser desbloqueado.</>, run: () => act(c, 'block') }),
                         },
                       ]}
                     />
                   ),
                 },
-              ]}
+              ] as (Col<any> & { hidden?: boolean })[]).filter((col) => !col.hidden && (caps.signal || !['ssid', 'rate', 'traffic'].includes(col.key)))}
             />
             <Pagination page={paged.page} pageSize={paged.pageSize} total={paged.total} onPage={paged.setPage} />
           </>
         )}
       </Card>
 
-      {(blocked.data?.rows?.length ?? 0) > 0 && (
+      {caps.blockedList && (blocked.data?.rows?.length ?? 0) > 0 && (
         <Card title={`Bloqueados (${blocked.data.rows.length})`} icon={UserX} bodyClass="">
           <DataList
             rows={blocked.data.rows}
@@ -233,7 +245,7 @@ function Clients({ id, site, ask }: { id: number; site: string; ask: (c: Confirm
 
 // ------------------------------------------------------------- redes Wi-Fi
 
-function Wlans({ id, site, ask }: { id: number; site: string; ask: (c: Confirm) => void }) {
+function Wlans({ id, site, ask, caps }: { id: number; site: string; ask: (c: Confirm) => void; caps: Caps }) {
   const { can } = useAuth();
   const q = useSiteData(id, site, 'wlans');
   const rows = q.data?.rows ?? [];
@@ -259,17 +271,17 @@ function Wlans({ id, site, ask }: { id: number; site: string; ask: (c: Confirm) 
             },
             { key: 'security', header: 'Segurança', cell: (w: any) => <span className="text-xs">{securityLabel(w.security, w.wpa_mode)}</span> },
             { key: 'band', header: 'Bandas', cell: (w: any) => <span className="text-xs">{w.band ?? '—'}</span> },
-            { key: 'clients', header: 'Clientes', cell: (w: any) => <span className="tabular-nums">{w.clients}</span> },
+            { key: 'clients', header: 'Clientes', cell: (w: any) => <span className="tabular-nums">{w.clients ?? '—'}</span> },
             {
               key: 'actions', header: '', mobile: 'actions', td: 'text-right',
               cell: (w: any) => (
                 <RowActions
                   title={w.name}
                   actions={[{
-                    icon: w.enabled ? PowerOff : Power, label: w.enabled ? 'Desativar rede' : 'Ativar rede', tone: w.enabled ? 'danger' : 'success', show: can('unifi.control'),
+                    icon: w.enabled ? PowerOff : Power, label: w.enabled ? 'Desativar rede' : 'Ativar rede', tone: w.enabled ? 'danger' : 'success', show: caps.wlanToggle && can('unifi.control'),
                     onClick: () => ask({
                       title: w.enabled ? 'Desativar rede Wi-Fi' : 'Ativar rede Wi-Fi', label: w.enabled ? 'Desativar' : 'Ativar', danger: w.enabled,
-                      message: w.enabled ? <>Desativar <b>{w.name}</b>? Os {w.clients} aparelho(s) conectados nela perdem o Wi-Fi.</> : <>Ativar novamente a rede <b>{w.name}</b>?</>,
+                      message: w.enabled ? <>Desativar <b>{w.name}</b>? {w.clients != null ? `Os ${w.clients} aparelho(s) conectados` : 'Os aparelhos conectados'} nela perdem o Wi-Fi.</> : <>Ativar novamente a rede <b>{w.name}</b>?</>,
                       run: () => toggle(w),
                     }),
                   }]}
@@ -329,7 +341,8 @@ export default function UnifiControllerPage() {
   const c = ctrl.data;
   const sites: any[] = c.sites ?? [];
   const site = params.get('site') ?? sites[0]?.name ?? '';
-  const tab = params.get('aba') ?? 'dispositivos';
+  const caps: Caps = c.capabilities ?? ALL_CAPS;
+  const tab = !caps.wlans && params.get('aba') === 'redes' ? 'dispositivos' : params.get('aba') ?? 'dispositivos';
   const setParam = (k: string, v: string) => {
     const p = new URLSearchParams(params);
     p.set(k, v);
@@ -358,6 +371,7 @@ export default function UnifiControllerPage() {
             <span>{c.name}</span>
             <span className="mono">{c.url.replace(/^https?:\/\//, '')}</span>
             {c.version && <span>Network {c.version}</span>}
+            {c.auth_type === 'apikey' && <Badge color="blue">API key</Badge>}
             {c.platform && <span className="max-sm:hidden">{c.platform === 'unifios' ? 'UniFi OS' : 'controlador clássico'}</span>}
             <DeviceStatusBadge status={c.status} title={c.status_message} />
           </span>
@@ -415,13 +429,18 @@ export default function UnifiControllerPage() {
       ) : (
         <>
           <Tabs
-            tabs={[{ key: 'dispositivos', label: 'Antenas e dispositivos' }, { key: 'clientes', label: 'Clientes Wi-Fi' }, { key: 'redes', label: 'Redes Wi-Fi' }]}
+            tabs={[{ key: 'dispositivos', label: 'Antenas e dispositivos' }, { key: 'clientes', label: 'Clientes Wi-Fi' }, ...(caps.wlans ? [{ key: 'redes', label: 'Redes Wi-Fi' }] : [])]}
             active={tab}
             onChange={(k) => setParam('aba', k)}
           />
-          {tab === 'dispositivos' && <Devices id={cid} site={site} ask={setConfirm} />}
-          {tab === 'clientes' && <Clients id={cid} site={site} ask={setConfirm} />}
-          {tab === 'redes' && <Wlans id={cid} site={site} ask={setConfirm} />}
+          {c.auth_type === 'apikey' && (
+            <Notice kind="info">
+              Acesso pela API oficial (API key): reiniciar antenas{caps.wlanToggle ? ' e ativar/desativar redes Wi-Fi' : ''} está disponível. Localizar, atualizar firmware, reconectar e bloquear clientes exigem acesso por usuário e senha.
+            </Notice>
+          )}
+          {tab === 'dispositivos' && <Devices id={cid} site={site} ask={setConfirm} caps={caps} />}
+          {tab === 'clientes' && <Clients id={cid} site={site} ask={setConfirm} caps={caps} />}
+          {tab === 'redes' && <Wlans id={cid} site={site} ask={setConfirm} caps={caps} />}
         </>
       )}
 

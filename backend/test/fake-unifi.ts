@@ -13,6 +13,9 @@ export class FakeUnifi {
   username = 'apiuser';
   password = 'Senha123';
   logins = 0;
+  apiKey = 'CHAVE-API-TESTE';
+  /** Versão informada pela Integration API (redes Wi-Fi só a partir da 10). */
+  intVersion = '10.1.84';
   commands: { path: string; body: any }[] = [];
   private tokens = new Set<string>();
   private csrf = 'csrf-' + randomBytes(4).toString('hex');
@@ -58,6 +61,65 @@ export class FakeUnifi {
     this.tokens.clear();
   }
 
+  private integration(req: http.IncomingMessage, res: http.ServerResponse, full: string, body: any) {
+    const send = (code: number, data: unknown) => {
+      res.writeHead(code, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(data));
+    };
+    if (req.headers['x-api-key'] !== this.apiKey) return send(401, { statusCode: 401, message: 'Unauthorized' });
+    const [path, qs] = full.split('?');
+    const params = new URLSearchParams(qs ?? '');
+    const page = (rows: any[]) => {
+      const offset = Number(params.get('offset') ?? 0);
+      const limit = Number(params.get('limit') ?? 25);
+      const data = rows.slice(offset, offset + limit);
+      return send(200, { offset, limit, count: data.length, totalCount: rows.length, data });
+    };
+    const site = this.data.default;
+    const SITE = 'b1c2d3e4-0000-4000-8000-000000000001';
+    const devOf = (d: any) => ({ id: d._id, name: d.name, model: d.model, macAddress: d.mac.toUpperCase(), ipAddress: d.ip, state: d.state === 1 ? 'ONLINE' : 'OFFLINE', features: ['accessPoint'], interfaces: ['radios'] });
+    if (path === '/v1/info') return send(200, { applicationVersion: this.intVersion });
+    if (path === '/v1/sites') return page([{ id: SITE, internalReference: 'default', name: 'Condomínio Teste' }]);
+    const m = path.match(/^\/v1\/sites\/([^/]+)\/(.+)$/);
+    if (!m || m[1] !== SITE) return send(404, { message: 'not found' });
+    const rest = m[2];
+    if (req.method !== 'GET') this.commands.push({ path: rest, body });
+    if (rest === 'devices') return page(site.devices.map(devOf));
+    const dm = rest.match(/^devices\/([^/]+)(\/.*)?$/);
+    if (dm) {
+      const d = site.devices.find((x) => x._id === dm[1]);
+      if (!d) return send(404, { message: 'Device not found' });
+      if (!dm[2]) {
+        return send(200, {
+          ...devOf(d), firmwareVersion: d.version, firmwareUpdatable: !!d.upgradable,
+          interfaces: { radios: [{ frequencyGHz: '2.4', channel: 6, channelWidthMHz: 20, wlanStandard: '802.11ac' }, { frequencyGHz: '5', channel: 36, channelWidthMHz: 80, wlanStandard: '802.11ac' }] },
+        });
+      }
+      if (dm[2] === '/statistics/latest') return send(200, { uptimeSec: d.uptime ?? 0, cpuUtilizationPct: 12, memoryUtilizationPct: 40 });
+      if (dm[2] === '/actions' && req.method === 'POST') return body?.action === 'RESTART' ? send(200, {}) : send(400, { message: 'Invalid action' });
+    }
+    if (rest === 'clients') {
+      return page(site.clients.map((c, i) => ({
+        type: 'WIRELESS', id: `cli-${i}`, name: c.name || c.hostname, ipAddress: c.ip, macAddress: c.mac.toUpperCase(),
+        connectedAt: new Date(Date.now() - 600_000).toISOString(), uplinkDeviceId: site.devices.find((d) => d.mac === c.ap_mac)?._id, access: { type: 'DEFAULT' },
+      })));
+    }
+    if (rest.startsWith('wifi/broadcasts')) {
+      if (Number(this.intVersion.split('.')[0]) < 10) return send(404, { message: 'not found' });
+      const wifi = (w: any) => ({ type: 'STANDARD', id: w._id, name: w.name, enabled: w.enabled, metadata: { origin: 'USER' }, securityConfiguration: { type: 'WPA2_PERSONAL' }, broadcastingFrequenciesGHz: ['2.4', '5'], hideName: false });
+      if (rest === 'wifi/broadcasts') return page(site.wlans.map(wifi));
+      const w = site.wlans.find((x) => x._id === rest.split('/')[2]);
+      if (!w) return send(404, { message: 'not found' });
+      if (req.method === 'GET') return send(200, { ...wifi(w), securityConfiguration: { type: 'WPA2_PERSONAL', passphrase: w.x_passphrase }, clientIsolationEnabled: false, uapsdEnabled: false });
+      if (req.method === 'PUT') {
+        if (!body?.name || !body?.securityConfiguration || 'id' in body || 'metadata' in body) return send(400, { message: 'Invalid body' });
+        w.enabled = body.enabled;
+        return send(200, wifi(w));
+      }
+    }
+    send(404, { message: 'not found' });
+  }
+
   private cookie(req: http.IncomingMessage, name: string) {
     return (req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === name)?.[1];
   }
@@ -69,6 +131,9 @@ export class FakeUnifi {
     };
     const ok = (data: unknown) => send(200, this.mode === 'legacy' ? { meta: { rc: 'ok' }, data } : { meta: { rc: 'ok' }, data });
     let path = req.url ?? '';
+
+    // ---- Integration API (API key)
+    if (path.startsWith('/proxy/network/integration/v1/')) return this.integration(req, res, path.slice('/proxy/network/integration'.length), body);
 
     // ---- login
     if (this.mode === 'unifios' && path === '/api/auth/login' && req.method === 'POST') {

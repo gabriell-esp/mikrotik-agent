@@ -140,6 +140,59 @@ describe('ações (com auditoria)', () => {
   });
 });
 
+describe('acesso por API key (Integration API oficial)', () => {
+  it('testa, detecta versão e recusa chave errada', async () => {
+    const ok = await call('POST', '/api/unifi/test', { url: os.url, auth_type: 'apikey', password: os.apiKey });
+    expect(ok.body).toMatchObject({ ok: true, auth_type: 'apikey', platform: 'unifios', version: '10.1.84', sites: [{ desc: 'Condomínio Teste' }] });
+    expect(ok.body.capabilities).toMatchObject({ restart: true, locate: false, block: false, wlanToggle: true });
+    const bad = await call('POST', '/api/unifi/test', { url: os.url, auth_type: 'apikey', password: 'errada' });
+    expect(bad.body).toMatchObject({ ok: false, kind: 'auth' });
+  });
+
+  it('lê dispositivos, clientes e redes; reinicia antena e alterna rede Wi-Fi', async () => {
+    const url = os.url.replace('127.0.0.1', 'localhost');
+    const c = await call('POST', '/api/unifi/controllers', { name: 'Cloud Key API', client_id: ids.client, url, auth_type: 'apikey', password: os.apiKey });
+    expect(c.status, JSON.stringify(c.body)).toBe(200);
+    ids.api = c.body.id;
+    expect(c.body).toMatchObject({ auth_type: 'apikey', username: null });
+    const raw = await q.one('SELECT password_enc FROM unifi_controllers WHERE id = $1', [ids.api]);
+    expect(raw.password_enc).not.toContain(os.apiKey);
+    const ref = await call('POST', `/api/unifi/controllers/${ids.api}/refresh`);
+    expect(ref.body.ok, JSON.stringify(ref.body)).toBe(true);
+    expect(ref.body.controller.summary).toMatchObject({ devices: 2, online: 1, offline: 1, clients: 2 });
+    const info = await call('GET', `/api/unifi/controllers/${ids.api}`);
+    const site = info.body.sites[0].name;
+    expect(site).toBe('b1c2d3e4-0000-4000-8000-000000000001');
+    const devs = await call('GET', `/api/unifi/controllers/${ids.api}/sites/${site}/devices`);
+    expect(devs.body.rows[0]).toMatchObject({ name: 'AP Hall', mac: 'aa:bb:cc:00:00:01', state: 'online', version: '6.6.55', upgradable: true, clients: 2, cpu: 12 });
+    expect(devs.body.rows[0].radios[0]).toMatchObject({ band: '2,4 GHz', channel: 6, width: 20 });
+    const cls = await call('GET', `/api/unifi/controllers/${ids.api}/sites/${site}/clients`);
+    expect(cls.body.rows[0]).toMatchObject({ name: 'celular-joao', ap_name: 'AP Hall', mac: '11:22:33:44:55:01' });
+    const wl = await call('GET', `/api/unifi/controllers/${ids.api}/sites/${site}/wlans`);
+    expect(wl.body.rows.map((w: any) => w.name)).toEqual(['Condominio', 'Visitantes']);
+    expect(JSON.stringify([devs.body, cls.body, wl.body])).not.toMatch(/SENHA-WIFI|OUTRA-SENHA/);
+
+    const base = `/api/unifi/controllers/${ids.api}/sites/${site}`;
+    expect((await call('POST', `${base}/devices/aa:bb:cc:00:00:01/action`, { action: 'restart', confirm: true, name: 'AP Hall' })).status).toBe(200);
+    expect(os.commands.at(-1)).toMatchObject({ path: 'devices/d1/actions', body: { action: 'RESTART' } });
+    const loc = await call('POST', `${base}/devices/aa:bb:cc:00:00:01/action`, { action: 'locate' });
+    expect(loc.status).toBe(400);
+    expect(loc.body.message).toMatch(/não está disponível no acesso por API key/);
+    expect((await call('POST', `${base}/clients/11:22:33:44:55:01/action`, { action: 'kick' })).status).toBe(400);
+    os.data.default.wlans[0].enabled = true;
+    expect((await call('PUT', `${base}/wlans/${wl.body.rows[0].id}`, { enabled: false, name: 'Condominio' })).status).toBe(200);
+    expect(os.data.default.wlans[0].enabled).toBe(false);
+    expect(os.data.default.wlans[0].x_passphrase).toBe('SENHA-WIFI-SECRETA');
+  });
+
+  it('Network 9.x: sem redes Wi-Fi pela API key, o resto funciona', async () => {
+    os.intVersion = '9.1.120';
+    const t = await call('POST', '/api/unifi/test', { url: os.url, auth_type: 'apikey', password: os.apiKey });
+    expect(t.body.capabilities).toMatchObject({ wlans: false, wlanToggle: false, restart: true });
+    os.intVersion = '10.1.84';
+  });
+});
+
 describe('permissões, escopo e falhas', () => {
   it('escritório não vê UniFi sem permissão; técnico só vê o próprio cliente', async () => {
     const esc = await login('esc', 'Admin12345x');
@@ -161,6 +214,6 @@ describe('permissões, escopo e falhas', () => {
     expect(devs.body.rows).toHaveLength(2);
     expect(devs.body.stale).toBe(true);
     const dash = await call('GET', '/api/dashboard');
-    expect(dash.body.unifi).toMatchObject({ controllers: 1, problems: 1 });
+    expect(dash.body.unifi).toMatchObject({ controllers: 2, problems: 1 });
   });
 });

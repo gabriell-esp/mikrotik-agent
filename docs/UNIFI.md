@@ -9,6 +9,26 @@ O sistema acessa a API do **UniFi Network Application** de cada controladora:
 
 O tipo é **detectado automaticamente** no primeiro login e lembrado. A sessão é reaproveitada entre as leituras, para não gerar um login por consulta, e renovada sozinha quando expira.
 
+## Formas de acesso
+
+No cadastro você escolhe entre duas formas de acesso:
+
+| | **Usuário e senha** | **API key** (API oficial) |
+|---|---|---|
+| Requisito | Usuário **local**, sem verificação em duas etapas | UniFi Network **9.0+** (redes Wi-Fi: **10.0+**) |
+| Ver antenas, clientes, firmware, uptime | ✔ | ✔ (inclui CPU e memória) |
+| Sinal, SSID e velocidade de cada cliente | ✔ | — |
+| Reiniciar antena | ✔ | ✔ |
+| Localizar (LED) e atualizar firmware | ✔ | — |
+| Reconectar / bloquear / desbloquear cliente | ✔ | — |
+| Ver e ativar/desativar redes Wi-Fi | ✔ | ✔ (Network 10+) |
+
+A tela de cada controladora mostra somente as ações disponíveis na forma de acesso usada. Se precisar das ações completas numa controladora cadastrada por API key, edite o cadastro e troque para usuário e senha.
+
+**Para criar a API key:** no UniFi Network da controladora, abra *Settings → Control Plane → Integrations* (em versões anteriores: *Settings → System → Integrations*) e clique em **Create API Key**. Copie a chave na hora, porque ela só é exibida uma vez. A chave fica com as permissões do administrador que a criou. Ela é guardada cifrada, como as senhas.
+
+Pela API key o sistema usa a *UniFi Network Integration API* (`/proxy/network/integration/v1` no UniFi OS ou `/integration/v1` no controlador instalado em servidor), com o cabeçalho `X-API-KEY`.
+
 ## O que o sistema faz
 
 - **Leitura (a cada 60 s, `UNIFI_POLL_INTERVAL_SEC`):** sites, dispositivos (antenas, switches, gateways), clientes conectados, clientes bloqueados, redes Wi-Fi e saúde. Se a controladora cair, a última leitura continua visível, marcada como desatualizada.
@@ -16,11 +36,11 @@ O tipo é **detectado automaticamente** no primeiro login e lembrado. A sessão 
   - **Antena:** localizar (piscar o LED), reiniciar, atualizar firmware.
   - **Cliente:** reconectar (kick), bloquear, desbloquear.
   - **Rede Wi-Fi:** ativar ou desativar.
-- **Segurança:** a senha da controladora fica cifrada (AES-256-GCM, chave fora do banco). **Senhas de Wi-Fi e chaves dos dispositivos não são lidas nem armazenadas**, porque os campos `x_*` são descartados no backend. O cadastro e o teste de conexão são somente leitura.
+- **Segurança:** a senha ou a API key da controladora fica cifrada (AES-256-GCM, chave fora do banco). **Senhas de Wi-Fi e chaves dos dispositivos não são lidas nem armazenadas**, porque os campos `x_*` são descartados no backend. O cadastro e o teste de conexão são somente leitura.
 
 ## Preparação de cada controladora
 
-1. **Crie um usuário local dedicado** na controladora. Em UniFi OS: *Settings → Admins & Users → Add Admin*, marque **Restrict to Local Access Only**, dê um nome (ex.: `slot1-sistema`) e uma senha forte.
+1. **Credencial.** Use uma API key (ver acima) ou **crie um usuário local dedicado** na controladora. Em UniFi OS: *Settings → Admins & Users → Add Admin*, marque **Restrict to Local Access Only**, dê um nome (ex.: `slot1-sistema`) e uma senha forte.
    - Função **Site Admin** (ou Super Admin) para usar as ações. Com **View Only** o sistema só consegue ler, e as ações retornam "sem permissão".
    - **Não use conta Ubiquiti (SSO) com verificação em duas etapas.** O login automático não consegue responder ao MFA.
 2. **Endereço acessível pelo servidor.** O caminho é o mesmo das MikroTiks, pelo túnel WireGuard. Use uma das opções:
@@ -41,3 +61,6 @@ O tipo é **detectado automaticamente** no primeiro login e lembrado. A sessão 
 | "Conexão recusada" / "inalcançável" | Rota, porta ou NAT até a Cloud Key. Teste do servidor com `curl -k https://IP/`. |
 | "Não respondeu como uma controladora UniFi" | URL ou porta errada (UniFi OS usa 443, o controlador clássico usa 8443). |
 | "O usuário da controladora não tem permissão" | O usuário é View Only. Use Site Admin para as ações. |
+| "API key recusada pela controladora" | Chave copiada errada, revogada ou criada por um administrador sem permissão. Crie outra. |
+| "Não respondeu à Integration API" | UniFi Network anterior à 9.0 (atualize ou use usuário e senha), ou URL/porta errada. |
+| "Esta ação não está disponível no acesso por API key" | Localizar, atualizar firmware e bloquear clientes exigem usuário e senha. |
