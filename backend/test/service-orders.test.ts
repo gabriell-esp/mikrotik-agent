@@ -135,6 +135,11 @@ describe('execução pelo técnico', () => {
     expect(d.body).toMatchObject({ total_cost: 77.5, report: 'Rascunho' });
     expect(d.body.photos).toHaveLength(1);
     expect(d.body.items.map((i: any) => [i.kind, i.quantity, i.unit_price])).toEqual([['material', 25, 2.5], ['despesa', 1, 15]]);
+    // Tamanho de foto real de celular já reduzida (~900 KB) e miniatura (~60 KB).
+    const big = await call('POST', `${base}/photos`, { image: jpeg(900_000), thumb: jpeg(60_000) }, 'tec');
+    expect(big.status, JSON.stringify(big.body)).toBe(200);
+    expect(((await call('GET', `${base}/photos/${big.body.id}`, undefined, 'tec')).body as Buffer).length).toBe(900_004);
+    expect((await call('DELETE', `${base}/photos/${big.body.id}`, {}, 'tec')).status).toBe(200);
     const extra = await call('POST', `${base}/photos`, { image: jpeg(), thumb: jpeg(100) }, 'tec');
     expect((await call('DELETE', `${base}/photos/${extra.body.id}`, {}, 'tec')).status).toBe(200);
     expect((await call('DELETE', `${base}/items/${d.body.items[1].id}`, {}, 'tec')).status).toBe(200);

@@ -4,6 +4,7 @@
  */
 import { PGlite } from '@electric-sql/pglite';
 import { PGLiteSocketServer } from '@electric-sql/pglite-socket';
+import './pglite-framing.js';
 
 // O pglite-socket não trata quedas de conexão (ex.: backend reiniciado pelo tsx watch).
 process.on('uncaughtException', (e: NodeJS.ErrnoException) => {

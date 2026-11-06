@@ -14,5 +14,7 @@ export default defineConfig({
     testTimeout: 30000,
     hookTimeout: 60000,
     fileParallelism: false,
+    // Corrige o pglite-socket para mensagens grandes (fotos das ordens de serviço).
+    setupFiles: ['./scripts/pglite-framing.ts'],
   },
 });
