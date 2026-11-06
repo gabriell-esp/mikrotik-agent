@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
-  BellRing, Building2, ChevronDown, ClipboardList, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
+  BellRing, Building2, ChevronDown, ClipboardList, ListTodo, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
   Users, Waypoints, Wifi, X, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -23,6 +23,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   ] },
   { title: 'Atendimento', items: [
     { to: '/os', label: 'Ordens de serviço', short: 'OS', icon: ClipboardList, perm: 'os.view_all|os.manage|os.execute' },
+    { to: '/planejamento', label: 'Planejamento', icon: ListTodo, perm: 'planner.manage' },
     { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
     { to: '/clientes', label: 'Clientes', icon: Building2, perm: 'clients.view' },
   ] },

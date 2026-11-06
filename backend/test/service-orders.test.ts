@@ -115,10 +115,16 @@ describe('execução pelo técnico', () => {
 
   it('lança gastos, salva o relatório e envia/abre/remove fotos', async () => {
     const base = `/api/os/${ids.os}`;
-    expect((await call('POST', `${base}/items`, { description: 'Cabo UTP cat6 (m)', quantity: 25, unit_price: 2.5 }, 'tec')).status).toBe(200);
-    expect((await call('POST', `${base}/items`, { kind: 'despesa', description: 'Estacionamento', quantity: 1, unit_price: 15 }, 'tec')).status).toBe(200);
-    expect((await call('POST', `${base}/items`, { description: 'x', quantity: 0 }, 'tec')).status).toBe(400);
-    expect((await call('POST', `${base}/items`, { description: 'Abraçadeira' }, 'tec2')).status).toBe(403);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Cabo UTP cat6', quantity: 25.5, unit: 'm' }, 'tec')).status).toBe(200);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Conector RJ45', quantity: 4 }, 'tec')).status).toBe(200);
+    expect((await call('POST', `${base}/items`, { kind: 'compra', store: 'Loja do Zé', description: 'Fita isolante e abraçadeiras', amount: 32.9 }, 'tec')).status).toBe(200);
+    // Material não guarda valor (campo extra é ignorado); compra exige loja e valor.
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Switch', quantity: 1, amount: 300 }, 'tec')).status).toBe(200);
+    expect((await call('POST', `${base}/items`, { kind: 'compra', description: 'Sem loja', amount: 10 }, 'tec')).status).toBe(400);
+    expect((await call('POST', `${base}/items`, { kind: 'compra', store: 'Loja', description: 'Sem valor' }, 'tec')).status).toBe(400);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'x', quantity: 0 }, 'tec')).status).toBe(400);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Cabo', quantity: 1, unit: 'kg' }, 'tec')).status).toBe(400);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Abraçadeira', quantity: 1 }, 'tec2')).status).toBe(403);
     expect((await call('PUT', `${base}/report`, { report: 'Rascunho' }, 'tec')).status).toBe(200);
 
     const up = await call('POST', `${base}/photos`, { image: jpeg(), thumb: jpeg(200), caption: 'Antes' }, 'tec');
@@ -132,9 +138,14 @@ describe('execução pelo técnico', () => {
     expect((await call('GET', `${base}/photos/${up.body.id}?thumb=1`, undefined, 'tec2')).status).toBe(403);
 
     const d = await call('GET', base, undefined, 'tec');
-    expect(d.body).toMatchObject({ total_cost: 77.5, report: 'Rascunho' });
+    expect(d.body).toMatchObject({ total_cost: 32.9, report: 'Rascunho' });
     expect(d.body.photos).toHaveLength(1);
-    expect(d.body.items.map((i: any) => [i.kind, i.quantity, i.unit_price])).toEqual([['material', 25, 2.5], ['despesa', 1, 15]]);
+    expect(d.body.items.map((i: any) => [i.kind, i.description, i.quantity, i.unit, i.store, i.amount])).toEqual([
+      ['material', 'Cabo UTP cat6', 25.5, 'm', null, null],
+      ['material', 'Conector RJ45', 4, 'un', null, null],
+      ['compra', 'Fita isolante e abraçadeiras', 1, 'un', 'Loja do Zé', 32.9],
+      ['material', 'Switch', 1, 'un', null, null],
+    ]);
     // Tamanho de foto real de celular já reduzida (~900 KB) e miniatura (~60 KB).
     const big = await call('POST', `${base}/photos`, { image: jpeg(900_000), thumb: jpeg(60_000) }, 'tec');
     expect(big.status, JSON.stringify(big.body)).toBe(200);
@@ -142,9 +153,9 @@ describe('execução pelo técnico', () => {
     expect((await call('DELETE', `${base}/photos/${big.body.id}`, {}, 'tec')).status).toBe(200);
     const extra = await call('POST', `${base}/photos`, { image: jpeg(), thumb: jpeg(100) }, 'tec');
     expect((await call('DELETE', `${base}/photos/${extra.body.id}`, {}, 'tec')).status).toBe(200);
-    expect((await call('DELETE', `${base}/items/${d.body.items[1].id}`, {}, 'tec')).status).toBe(200);
+    expect((await call('DELETE', `${base}/items/${d.body.items[2].id}`, {}, 'tec')).status).toBe(200);
     const after = (await call('GET', base, undefined, 'tec')).body;
-    expect([after.photos.length, after.total_cost]).toEqual([1, 62.5]);
+    expect([after.photos.length, after.total_cost, after.items.length]).toEqual([1, 0, 3]);
   });
 
   it('finaliza exigindo relatório; depois de concluída só o gestor reabre', async () => {
@@ -154,7 +165,7 @@ describe('execução pelo técnico', () => {
     expect(f.status).toBe(200);
     expect(f.body).toMatchObject({ status: 'concluida', running_since: null });
     expect(f.body.finished_at).toBeTruthy();
-    expect((await call('POST', `${base}/items`, { description: 'Depois do fim' }, 'tec')).status).toBe(403);
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Depois do fim', quantity: 1 }, 'tec')).status).toBe(403);
     expect((await call('POST', `${base}/reopen`, {}, 'tec')).status).toBe(403);
     const ro = await call('POST', `${base}/reopen`, {});
     expect(ro.body.status).toBe('pausada');
@@ -178,5 +189,54 @@ describe('execução pelo técnico', () => {
     expect((await call('PUT', base, { title: 'x x x' })).status).toBe(400);
     const tabs = await call('GET', '/api/os?status=todas');
     expect(tabs.body.counts).toMatchObject({ cancelada: 1, pausada: 1, aberta: 2 });
+  });
+});
+
+describe('planejamento (ordens futuras, orçamentos e lembretes)', () => {
+  it('só quem tem a permissão acessa; administrador cria, lista por prazo e conta atrasados', async () => {
+    expect((await call('GET', '/api/planner', undefined, 'tec')).status).toBe(403);
+    expect((await call('GET', '/api/planner', undefined, 'esc')).status).toBe(403);
+    const day = (n: number) => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
+    const a = await call('POST', '/api/planner', {
+      kind: 'orcamento', title: 'Orçamento CFTV portaria', client_id: ids.client, due_date: day(3), amount: 4500, notes: '4 câmeras + DVR',
+      checklist: [{ text: 'Visita técnica' }, { text: 'Enviar proposta' }],
+    });
+    expect(a.status, JSON.stringify(a.body)).toBe(200);
+    expect(a.body).toMatchObject({ kind: 'orcamento', status: 'pendente', amount: 4500, due_date: day(3), client_name: 'Condomínio Alfa', created_by_name: 'Admin' });
+    expect(a.body.checklist).toEqual([{ text: 'Visita técnica', done: false }, { text: 'Enviar proposta', done: false }]);
+    ids.plan = a.body.id;
+    ids.late = (await call('POST', '/api/planner', { kind: 'os_futura', title: 'Trocar nobreak do rack', due_date: day(-2), priority: 'alta' })).body.id;
+    await call('POST', '/api/planner', { kind: 'lembrete', title: 'Renovar domínio' });
+    expect((await call('POST', '/api/planner', { title: 'x' })).status).toBe(400);
+    expect((await call('POST', '/api/planner', { title: 'Data ruim', due_date: '31/12/2026' })).status).toBe(400);
+
+    const list = await call('GET', '/api/planner');
+    expect(list.body.rows.map((r: any) => r.title)).toEqual(['Trocar nobreak do rack', 'Orçamento CFTV portaria', 'Renovar domínio']);
+    expect(list.body.counts).toMatchObject({ os_futura: { open: 1, overdue: 1 }, orcamento: { open: 1, overdue: 0 }, lembrete: { open: 1 } });
+    expect((await call('GET', '/api/planner?kind=orcamento')).body.rows).toHaveLength(1);
+    expect((await call('GET', '/api/planner?q=cftv')).body.rows[0].id).toBe(ids.plan);
+  });
+
+  it('marca checklist e situação, gera OS a partir do item e exclui deixando registro', async () => {
+    const ck = await call('PUT', `/api/planner/${ids.plan}/checklist`, { checklist: [{ text: 'Visita técnica', done: true }, { text: 'Enviar proposta', done: false }] });
+    expect(ck.body.checklist[0].done).toBe(true);
+    const st = await call('POST', `/api/planner/${ids.plan}/status`, { status: 'aguardando' });
+    expect(st.body).toMatchObject({ status: 'aguardando', done_at: null });
+    const done = await call('POST', `/api/planner/${ids.plan}/status`, { status: 'concluido' });
+    expect(done.body.done_at).toBeTruthy();
+    expect((await call('GET', '/api/planner')).body.rows.map((r: any) => r.id)).not.toContain(ids.plan);
+    expect((await call('GET', '/api/planner?view=encerrados')).body.rows.map((r: any) => r.id)).toContain(ids.plan);
+
+    const os = await call('POST', '/api/os', { title: 'Trocar nobreak do rack', priority: 'alta', assigned_to: ids.tec });
+    const link = await call('POST', `/api/planner/${ids.late}/link`, { service_order_id: os.body.id });
+    expect(link.body).toMatchObject({ status: 'concluido', service_order_id: os.body.id, service_order_status: 'aberta' });
+    expect((await call('POST', `/api/planner/${ids.late}/link`, { service_order_id: 99999 })).status).toBe(400);
+
+    const ed = await call('PUT', `/api/planner/${ids.plan}`, { ...done.body, status: 'pendente', title: 'Orçamento CFTV portaria (revisado)' });
+    expect(ed.body).toMatchObject({ status: 'pendente', done_at: null, title: 'Orçamento CFTV portaria (revisado)', updated_by_name: 'Admin' });
+    expect((await call('DELETE', `/api/planner/${ids.plan}`)).status).toBe(200);
+    expect((await call('GET', '/api/planner?view=todos')).body.rows.map((r: any) => r.id)).not.toContain(ids.plan);
+    const log = await q.one("SELECT details FROM audit_log WHERE action = 'planner.delete' ORDER BY id DESC LIMIT 1");
+    expect(log.details).toMatchObject({ kind: 'orcamento', notes: '4 câmeras + DVR' });
   });
 });

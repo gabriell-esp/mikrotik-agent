@@ -7,7 +7,8 @@ import { Button, ErrorBox, Field, Input, Modal, Notice, Select, Textarea, useToa
 const empty = { title: '', description: '', client_id: null as number | null, location: '', contact: '', priority: 'normal', assigned_to: null as number | null, scheduled_for: '' };
 
 /** Abertura/edição de ordem de serviço (quem tem a permissão de gerenciar). */
-export default function ServiceOrderForm({ open, onClose, initial, onSaved }: { open: boolean; onClose: () => void; initial?: any; onSaved?: (o: any) => void }) {
+/** initial: ordem existente (edição). preset: valores iniciais de uma ordem nova (ex.: vinda do planejamento). */
+export default function ServiceOrderForm({ open, onClose, initial, preset, onSaved }: { open: boolean; onClose: () => void; initial?: any; preset?: Partial<typeof empty>; onSaved?: (o: any) => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients'), enabled: open });
@@ -24,9 +25,9 @@ export default function ServiceOrderForm({ open, onClose, initial, onSaved }: { 
           title: initial.title, description: initial.description ?? '', client_id: initial.client_id, location: initial.location ?? '', contact: initial.contact ?? '',
           priority: initial.priority, assigned_to: initial.assigned_to, scheduled_for: toLocalInput(initial.scheduled_for),
         }
-      : { ...empty });
+      : { ...empty, ...preset });
     setError(null);
-  }, [open, initial]);
+  }, [open, initial, preset]);
 
   const set = <K extends keyof typeof empty>(k: K, v: (typeof empty)[K]) => setF((x) => ({ ...x, [k]: v }));
   const reassigning = editing && initial.status === 'em_andamento' && f.assigned_to !== initial.assigned_to;
@@ -37,7 +38,8 @@ export default function ServiceOrderForm({ open, onClose, initial, onSaved }: { 
     try {
       const body = { ...f, scheduled_for: fromLocalInput(f.scheduled_for) };
       const saved = editing ? await put(`/os/${initial.id}`, body) : await post('/os', body);
-      toast.ok(editing ? 'Ordem de serviço atualizada.' : `Ordem de serviço #${saved.id} aberta.`);
+      // Vinda do planejamento, quem chamou avisa o resultado completo.
+      if (!preset) toast.ok(editing ? 'Ordem de serviço atualizada.' : `Ordem de serviço #${saved.id} aberta.`);
       qc.invalidateQueries({ queryKey: ['os'] });
       onSaved?.(saved);
       onClose();

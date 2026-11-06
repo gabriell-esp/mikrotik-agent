@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   'os.view_all': 'Ver todas as ordens de serviço',
   'os.manage': 'Abrir, atribuir, editar, reabrir e cancelar ordens de serviço',
   'os.execute': 'Executar ordens de serviço atribuídas (cronômetro, relatório, gastos e fotos)',
+  'planner.manage': 'Planejamento: ordens futuras, orçamentos e lembretes',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;

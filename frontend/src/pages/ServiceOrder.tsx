@@ -1,13 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
-  Ban, Camera, CheckCircle2, ChevronRight, ClipboardList, Clock, History, ImagePlus, MapPin, Pause, Pencil, Phone, Play, Receipt, RotateCcw, Trash2, User,
+  Ban, Camera, CheckCircle2, Package, Store, ChevronRight, ClipboardList, Clock, History, ImagePlus, MapPin, Pause, Pencil, Phone, Play, Receipt, RotateCcw, Trash2, User,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import RowActions from '../components/RowActions';
 import ServiceOrderForm from '../components/ServiceOrderForm';
-import { Badge, Button, Card, ConfirmDialog, Empty, ErrorBox, Field, IconButton, Input, Modal, Notice, PageHeader, PageSkeleton, Select, Textarea, useToast } from '../components/ui';
+import { Badge, Button, Card, ConfirmDialog, Empty, ErrorBox, Field, IconButton, Input, Modal, Notice, PageHeader, PageSkeleton, Textarea, useToast } from '../components/ui';
 import { del, get, post, put } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime } from '../lib/format';
@@ -17,7 +17,7 @@ import { OsStatusBadge } from './ServiceOrders';
 const EVENT: Record<string, string> = {
   criada: 'Ordem aberta', editada: 'Dados alterados', atribuida: 'Técnico alterado', iniciada: 'Serviço iniciado', retomada: 'Serviço retomado',
   pausada: 'Serviço pausado', concluida: 'Ordem concluída', reaberta: 'Ordem reaberta', cancelada: 'Ordem cancelada',
-  gasto: 'Gasto lançado', gasto_removido: 'Gasto removido', foto: 'Foto enviada', foto_removida: 'Foto removida',
+  gasto: 'Item lançado', gasto_removido: 'Item removido', foto: 'Foto enviada', foto_removida: 'Foto removida',
 };
 
 function eventDetail(e: any) {
@@ -25,7 +25,10 @@ function eventDetail(e: any) {
   if (e.kind === 'atribuida') return `${d.from ?? 'sem técnico'} → ${d.to ?? 'sem técnico'}`;
   if (e.kind === 'criada' && d.assigned) return `para ${d.assigned}`;
   if (e.kind === 'cancelada') return d.reason;
-  if (e.kind === 'gasto' || e.kind === 'gasto_removido') return d.description;
+  if (e.kind === 'gasto' || e.kind === 'gasto_removido') {
+    if (d.kind === 'compra') return `Compra: ${d.description} (${d.store}) · ${fmtMoney(d.amount)}`;
+    return d.quantity != null ? `${d.description} · ${fmtQty(d.quantity, d.unit ?? 'un')}` : d.description;
+  }
   if (e.kind === 'foto') return d.caption;
   return null;
 }
@@ -104,18 +107,53 @@ function Report({ o, onSaved }: { o: any; onSaved: () => void }) {
   );
 }
 
-// ------------------------------------------------------------- gastos
+// ------------------------------------------------------------- materiais e compras
+
+const fmtQty = (q: number, unit: string) => `${q.toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ${unit === 'm' ? 'm' : q === 1 ? 'unidade' : 'unidades'}`;
+
+function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
+  return (
+    <div className="grid auto-cols-fr grid-flow-col rounded-lg bg-slate-100 p-0.5">
+      {options.map(([k, l]) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => onChange(k)}
+          className={clsx('rounded-md px-3 py-1.5 text-sm font-medium transition', value === k ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-900/5' : 'text-slate-500 hover:text-slate-800')}
+        >
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const EMPTY_ITEM = { kind: 'material' as 'material' | 'compra', description: '', quantity: '1', unit: 'un' as 'un' | 'm', store: '', amount: '' };
 
 function Items({ o, onChanged }: { o: any; onChanged: () => void }) {
   const toast = useToast();
-  const [f, setF] = useState({ kind: 'material', description: '', quantity: '1', unit_price: '' });
+  const [f, setF] = useState({ ...EMPTY_ITEM });
   const [busy, setBusy] = useState(false);
-  const num = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')));
+  // Aceita "1,5", "1.5" e "1.234,50".
+  const num = (v: string) => {
+    const t = v.trim();
+    if (!t) return NaN;
+    return Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t);
+  };
+  const materials = o.items.filter((i: any) => i.kind === 'material');
+  const purchases = o.items.filter((i: any) => i.kind === 'compra');
+  const valid = f.kind === 'material'
+    ? f.description.trim().length >= 2 && num(f.quantity) > 0
+    : f.store.trim().length >= 2 && f.description.trim().length >= 2 && num(f.amount) > 0;
+
   const add = async () => {
     setBusy(true);
     try {
-      await post(`/os/${o.id}/items`, { kind: f.kind, description: f.description, quantity: num(f.quantity) ?? 1, unit_price: num(f.unit_price) });
-      setF({ kind: f.kind, description: '', quantity: '1', unit_price: '' });
+      await post(`/os/${o.id}/items`, f.kind === 'material'
+        ? { kind: 'material', description: f.description, quantity: num(f.quantity), unit: f.unit }
+        : { kind: 'compra', store: f.store, description: f.description, amount: num(f.amount) });
+      // Mantém o tipo, a unidade e a loja para lançar vários itens seguidos.
+      setF({ ...EMPTY_ITEM, kind: f.kind, unit: f.unit, store: f.store });
       onChanged();
     } catch (e) {
       toast.err(e);
@@ -131,39 +169,59 @@ function Items({ o, onChanged }: { o: any; onChanged: () => void }) {
       toast.err(e);
     }
   };
+  const row = (i: any, main: React.ReactNode, sub: React.ReactNode, right: React.ReactNode) => (
+    <li key={i.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium break-words text-slate-900">{main}</div>
+        <div className="text-xs text-slate-500">{sub}{i.created_by_name && <> · {i.created_by_name}</>}</div>
+      </div>
+      <div className="text-sm font-semibold whitespace-nowrap text-slate-900 tabular-nums">{right}</div>
+      {o.can.work && <IconButton icon={Trash2} label="Remover" tone="danger" onClick={() => remove(i)} />}
+    </li>
+  );
+
   return (
-    <Card title="Gastos (materiais e despesas)" icon={Receipt} bodyClass="">
-      {o.items.length ? (
-        <ul className="divide-y divide-slate-100">
-          {o.items.map((i: any) => (
-            <li key={i.id} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-slate-900">{i.description}</div>
-                <div className="text-xs text-slate-500">
-                  <Badge color={i.kind === 'despesa' ? 'purple' : 'slate'}>{i.kind === 'despesa' ? 'Despesa' : 'Material'}</Badge>
-                  <span className="ml-2 tabular-nums">{i.quantity.toLocaleString('pt-BR')} × {fmtMoney(i.unit_price)}</span>
-                  {i.created_by_name && <span className="ml-2">· {i.created_by_name}</span>}
-                </div>
-              </div>
-              <div className="text-sm font-semibold whitespace-nowrap text-slate-900 tabular-nums">{i.unit_price != null ? fmtMoney(i.quantity * i.unit_price) : '—'}</div>
-              {o.can.work && <IconButton icon={Trash2} label="Remover" tone="danger" onClick={() => remove(i)} />}
-            </li>
-          ))}
-          <li className="flex justify-between bg-slate-50/70 px-4 py-2.5 text-sm font-semibold sm:px-5"><span>Total</span><span className="tabular-nums">{fmtMoney(o.total_cost)}</span></li>
-        </ul>
-      ) : (
-        <p className="px-4 py-4 text-sm text-slate-400 sm:px-5">Nenhum gasto lançado.</p>
+    <Card title="Materiais e compras" icon={Package} bodyClass="">
+      {!o.items.length && <p className="px-4 py-4 text-sm text-slate-400 sm:px-5">Nada lançado ainda.</p>}
+      {materials.length > 0 && (
+        <>
+          <div className="bg-slate-50/70 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase sm:px-5">Materiais usados</div>
+          <ul className="divide-y divide-slate-100">
+            {materials.map((i: any) => row(i, i.description, 'Material', fmtQty(i.quantity, i.unit)))}
+          </ul>
+        </>
+      )}
+      {purchases.length > 0 && (
+        <>
+          <div className="bg-slate-50/70 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase sm:px-5">Compras em loja</div>
+          <ul className="divide-y divide-slate-100">
+            {purchases.map((i: any) => row(i, i.description, <span className="inline-flex items-center gap-1"><Store className="size-3" />{i.store}</span>, fmtMoney(i.amount)))}
+            <li className="flex justify-between px-4 py-2.5 text-sm font-semibold sm:px-5"><span>Total pago em compras</span><span className="tabular-nums">{fmtMoney(o.total_cost)}</span></li>
+          </ul>
+        </>
       )}
       {o.can.work && (
-        <div className="grid grid-cols-6 gap-2 border-t border-slate-100 px-4 py-3 sm:px-5">
-          <Select className="col-span-6 sm:col-span-1" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
-            <option value="material">Material</option>
-            <option value="despesa">Despesa</option>
-          </Select>
-          <Input className="col-span-6 sm:col-span-2" placeholder={f.kind === 'despesa' ? 'Ex.: Estacionamento' : 'Ex.: Conector RJ45'} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-          <Input className="col-span-2 sm:col-span-1" inputMode="decimal" placeholder="Qtd." value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} />
-          <Input className="col-span-2 sm:col-span-1" inputMode="decimal" placeholder="R$ unit." value={f.unit_price} onChange={(e) => setF({ ...f, unit_price: e.target.value })} />
-          <Button className="col-span-2 sm:col-span-1" onClick={add} loading={busy} disabled={f.description.trim().length < 2}>Lançar</Button>
+        <div className="space-y-2 border-t border-slate-100 bg-slate-50/40 px-4 py-3 sm:px-5">
+          <Segmented value={f.kind} onChange={(kind) => setF({ ...f, kind })} options={[['material', 'Material usado'], ['compra', 'Compra em loja']]} />
+          {f.kind === 'material' ? (
+            <div className="grid grid-cols-6 gap-2">
+              <Input className="col-span-6 sm:col-span-3" placeholder="Ex.: Cabo UTP cat6, conector RJ45" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+              <Input className="col-span-2 sm:col-span-1" inputMode="decimal" placeholder="Qtd." value={f.quantity} onChange={(e) => setF({ ...f, quantity: e.target.value })} />
+              <div className="col-span-4 sm:col-span-2">
+                <Segmented value={f.unit} onChange={(unit) => setF({ ...f, unit })} options={[['un', 'Unidades'], ['m', 'Metros']]} />
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-6 gap-2">
+              <Input className="col-span-6 sm:col-span-2" placeholder="Loja" value={f.store} onChange={(e) => setF({ ...f, store: e.target.value })} />
+              <Input className="col-span-6 sm:col-span-3" placeholder="O que foi comprado" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+              <Input className="col-span-6 sm:col-span-1" inputMode="decimal" placeholder="R$ pago" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{f.kind === 'compra' ? 'Tire uma foto da nota em “Fotos” para comprovar a compra.' : 'Somente a quantidade: valores dos materiais não são lançados aqui.'}</p>
+            <Button onClick={add} loading={busy} disabled={!valid} className="shrink-0">Lançar</Button>
+          </div>
         </div>
       )}
     </Card>
@@ -342,7 +400,7 @@ export default function ServiceOrderPage() {
                 { icon: MapPin, l: 'Local', v: o.location },
                 { icon: Phone, l: 'Contato', v: o.contact },
                 { icon: Clock, l: 'Agendada para', v: o.scheduled_for && fmtDateTime(o.scheduled_for) },
-                { icon: Receipt, l: 'Total de gastos', v: fmtMoney(o.total_cost) },
+                { icon: Receipt, l: 'Compras em loja', v: o.total_cost ? fmtMoney(o.total_cost) : null },
               ].filter((r) => r.v).map((r) => (
                 <div key={r.l} className="flex gap-2.5">
                   <r.icon className="mt-0.5 size-4 shrink-0 text-slate-400" />
@@ -390,10 +448,10 @@ export default function ServiceOrderPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-3 divide-x divide-slate-100 rounded-xl border border-slate-200 py-2.5 text-center">
             <div><div className="font-semibold tabular-nums">{fmtClock(o.work_seconds + (o.running_since ? (Date.now() - new Date(o.running_since).getTime()) / 1000 : 0))}</div><div className="text-[11px] text-slate-500">Tempo</div></div>
-            <div><div className="font-semibold tabular-nums">{fmtMoney(o.total_cost)}</div><div className="text-[11px] text-slate-500">Gastos</div></div>
+            <div><div className="font-semibold tabular-nums">{fmtMoney(o.total_cost)}</div><div className="text-[11px] text-slate-500">Compras</div></div>
             <div><div className="font-semibold tabular-nums">{o.photos.length}</div><div className="text-[11px] text-slate-500">Fotos</div></div>
           </div>
-          <Field label="O que foi feito" hint="Obrigatório. Os gastos e as fotos já lançados ficam registrados na ordem.">
+          <Field label="O que foi feito" hint="Obrigatório. Os materiais, as compras e as fotos já lançados ficam registrados na ordem.">
             <Textarea rows={6} value={report} onChange={(e) => setReport(e.target.value)} autoFocus />
           </Field>
         </div>

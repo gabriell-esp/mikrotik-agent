@@ -24,6 +24,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'unifi.client.unblock': 'Cliente Wi-Fi desbloqueado', 'unifi.wlan.enable': 'Rede Wi-Fi ativada', 'unifi.wlan.disable': 'Rede Wi-Fi desativada',
   'os.create': 'Ordem de serviço aberta', 'os.update': 'Ordem de serviço alterada', 'os.assign': 'Ordem de serviço atribuída',
   'os.finish': 'Ordem de serviço concluída', 'os.reopen': 'Ordem de serviço reaberta', 'os.cancel': 'Ordem de serviço cancelada',
+  'planner.create': 'Item de planejamento criado', 'planner.delete': 'Item de planejamento excluído', 'planner.to_os': 'Planejamento virou OS',
 };
 
 const FIELD_LABEL: Record<string, string> = {

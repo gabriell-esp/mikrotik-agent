@@ -12,6 +12,7 @@ import DevicesPage from './pages/Devices';
 import LoginPage from './pages/Login';
 import NotificationsPage from './pages/Notifications';
 import PppoePage from './pages/Pppoe';
+import PlannerPage from './pages/Planner';
 import PppoeDevicePage from './pages/PppoeDevice';
 import ServiceOrderPage from './pages/ServiceOrder';
 import ServiceOrdersPage from './pages/ServiceOrders';
@@ -46,6 +47,7 @@ export default function App() {
         {can('pppoe.view') && <Route path="pppoe/:id" element={<PppoeDevicePage />} />}
         {osAccess && <Route path="os" element={<ServiceOrdersPage />} />}
         {osAccess && <Route path="os/:id" element={<ServiceOrderPage />} />}
+        {can('planner.manage') && <Route path="planejamento" element={<PlannerPage />} />}
         {can('audit.view') && <Route path="auditoria" element={<AuditPage />} />}
         {can('audit.view') && <Route path="auditoria/:key" element={<AuditDevicePage />} />}
         {can('users.manage') && <Route path="usuarios" element={<UsersPage />} />}

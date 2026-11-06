@@ -25,12 +25,21 @@ const orderSchema = z.object({
   scheduled_for: z.string().datetime({ offset: true }).nullable().optional().transform((v) => v ?? null),
 });
 
-const itemSchema = z.object({
-  kind: z.enum(['material', 'despesa']).default('material'),
-  description: z.string().trim().min(2, 'Descreva o item').max(300),
-  quantity: z.number().positive('Quantidade deve ser maior que zero').max(1_000_000).default(1),
-  unit_price: z.number().min(0, 'Valor não pode ser negativo').max(10_000_000).nullable().default(null),
-});
+/** Material usado (quantidade, sem valor) ou compra feita em loja durante o serviço (valor pago). */
+const itemSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('material'),
+    description: z.string().trim().min(2, 'Descreva o material').max(300),
+    quantity: z.number().positive('Quantidade deve ser maior que zero').max(1_000_000),
+    unit: z.enum(['un', 'm']).default('un'),
+  }),
+  z.object({
+    kind: z.literal('compra'),
+    store: z.string().trim().min(2, 'Informe a loja').max(150),
+    description: z.string().trim().min(2, 'Informe o que foi comprado').max(300),
+    amount: z.number().positive('Informe o valor pago').max(10_000_000),
+  }),
+], { errorMap: () => ({ message: 'Escolha material ou compra.' }) });
 
 const reportSchema = z.object({ report: z.string().trim().max(10000).default('') });
 const photoSchema = z.object({
@@ -70,7 +79,7 @@ const BASE = `
                     WHERE t.order_id = o.id AND t.ended_at IS NOT NULL), 0)::float8 AS work_seconds,
          (SELECT t.started_at FROM service_order_time t WHERE t.order_id = o.id AND t.ended_at IS NULL) AS running_since,
          (SELECT count(*) FROM service_order_photos p WHERE p.order_id = o.id)::int AS photos,
-         COALESCE((SELECT sum(i.quantity * i.unit_price) FROM service_order_items i WHERE i.order_id = o.id), 0)::float8 AS total_cost
+         COALESCE((SELECT sum(i.amount) FROM service_order_items i WHERE i.order_id = o.id), 0)::float8 AS total_cost
     FROM service_orders o
     LEFT JOIN clients c ON c.id = o.client_id
     LEFT JOIN users a ON a.id = o.assigned_to
@@ -189,7 +198,7 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   app.get('/api/os/:id', async (req) => {
     const { user, order } = await orderFromRequest(req);
     const [items, photos, events] = await Promise.all([
-      query('SELECT i.id, i.kind, i.description, i.quantity::float8 AS quantity, i.unit_price::float8 AS unit_price, i.created_at, u.name AS created_by_name FROM service_order_items i LEFT JOIN users u ON u.id = i.created_by WHERE i.order_id = $1 ORDER BY i.id', [order.id]),
+      query('SELECT i.id, i.kind, i.description, i.quantity::float8 AS quantity, i.unit, i.store, i.amount::float8 AS amount, i.created_at, u.name AS created_by_name FROM service_order_items i LEFT JOIN users u ON u.id = i.created_by WHERE i.order_id = $1 ORDER BY i.id', [order.id]),
       query('SELECT p.id, p.caption, p.size, p.created_at, p.uploaded_by, u.name AS uploaded_by_name FROM service_order_photos p LEFT JOIN users u ON u.id = p.uploaded_by WHERE p.order_id = $1 ORDER BY p.id', [order.id]),
       query('SELECT id, at, username, kind, details FROM service_order_events WHERE order_id = $1 ORDER BY at, id', [order.id]),
     ]);
@@ -335,8 +344,13 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     if (!canWork(user, order)) throw forbidden('Você não pode lançar gastos nesta ordem.');
     const b = parse(itemSchema, req.body);
     await tx(async (c) => {
-      await c.query('INSERT INTO service_order_items(order_id, kind, description, quantity, unit_price, created_by) VALUES ($1,$2,$3,$4,$5,$6)', [order.id, b.kind, b.description, b.quantity, b.unit_price, user.id]);
-      await event(c, order.id, user, 'gasto', { description: b.description, quantity: b.quantity, unit_price: b.unit_price });
+      if (b.kind === 'material') {
+        await c.query('INSERT INTO service_order_items(order_id, kind, description, quantity, unit, created_by) VALUES ($1,$2,$3,$4,$5,$6)', [order.id, b.kind, b.description, b.quantity, b.unit, user.id]);
+        await event(c, order.id, user, 'gasto', { kind: b.kind, description: b.description, quantity: b.quantity, unit: b.unit });
+      } else {
+        await c.query('INSERT INTO service_order_items(order_id, kind, description, store, amount, created_by) VALUES ($1,$2,$3,$4,$5,$6)', [order.id, b.kind, b.description, b.store, b.amount, user.id]);
+        await event(c, order.id, user, 'gasto', { kind: b.kind, description: b.description, store: b.store, amount: b.amount });
+      }
     });
     return { ok: true };
   });

@@ -142,7 +142,7 @@ export default function ServiceOrdersPage() {
                 },
                 { key: 'time', header: 'Tempo', td: 'whitespace-nowrap', cell: (o: any) => <WorkTime o={o} /> },
                 {
-                  key: 'cost', header: 'Gastos', mobile: 'hide',
+                  key: 'cost', header: 'Compras', mobile: 'hide',
                   cell: (o: any) => (
                     <span className="text-xs whitespace-nowrap text-slate-600">
                       {o.total_cost ? fmtMoney(o.total_cost) : '—'}
