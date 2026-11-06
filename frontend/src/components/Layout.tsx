@@ -119,7 +119,7 @@ export default function Layout() {
   };
 
   const navList = (compact: boolean) => (
-    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {sections.map((s) => (
         <div key={s.title}>
           {!compact && <div className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{s.title}</div>}
@@ -186,7 +186,7 @@ export default function Layout() {
               </div>
               <button onClick={() => setMobileOpen(false)} className="flex size-10 items-center justify-center rounded-full bg-white/5 text-slate-300" aria-label="Fechar menu"><X className="size-5" /></button>
             </div>
-            <div className="overflow-y-auto overscroll-contain">{navList(false)}</div>
+            <div className="overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{navList(false)}</div>
             <div className="grid grid-cols-2 gap-2 border-t border-white/5 p-3">
               <button onClick={() => { setMobileOpen(false); nav('/senha'); }} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white/5 text-sm font-medium text-slate-200 active:bg-white/10">
                 <KeyRound className="size-4" /> Alterar senha
