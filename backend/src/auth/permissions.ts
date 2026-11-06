@@ -25,6 +25,9 @@ export const PERMISSIONS = {
   'unifi.view': 'Ver controladoras UniFi (antenas, clientes e redes Wi-Fi)',
   'unifi.manage': 'Cadastrar/editar controladoras UniFi e credenciais',
   'unifi.control': 'Controlar UniFi (reiniciar/atualizar antenas, clientes e redes Wi-Fi)',
+  'os.view_all': 'Ver todas as ordens de serviço',
+  'os.manage': 'Abrir, atribuir, editar, reabrir e cancelar ordens de serviço',
+  'os.execute': 'Executar ordens de serviço atribuídas (cronômetro, relatório, gastos e fotos)',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -43,9 +46,10 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
     'monitor.view', 'monitor.firewall', 'logs.view',
     'pppoe.view', 'pppoe.create', 'pppoe.edit', 'pppoe.toggle', 'pppoe.disconnect',
     'unifi.view', 'unifi.control',
+    'os.execute',
   ],
   // Escritório: consulta para atendimento. Criação/edição/senha concedidas individualmente.
-  escritorio: ['dashboard.view', 'clients.view', 'devices.view', 'pppoe.view'],
+  escritorio: ['dashboard.view', 'clients.view', 'devices.view', 'pppoe.view', 'os.view_all', 'os.manage'],
 };
 
 export function effectivePermissions(role: Role, grant: string[], revoke: string[]): Set<Permission> {

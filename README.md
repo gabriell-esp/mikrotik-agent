@@ -17,6 +17,7 @@ Navegador ──HTTPS──▶ Nginx (servidor) ──▶ web (Nginx + SPA React
 - **Interface atualizada sozinha a cada 60 s, sem recarregar a tela:** só os dados visíveis são trocados, e o indicador “Atualizado às HH:MM:SS” na barra superior mostra a última sincronização (clique nele para atualizar na hora).
 - **Alertas pelo WhatsApp** (WPPConnect): queda, retorno, falha de autenticação, recursos altos e túnel sem handshake.
 - **Controladoras UniFi** (Cloud Key Gen2 / UniFi OS e controlador clássico): antenas, clientes e redes Wi-Fi, com ações de reiniciar, localizar, atualizar firmware, reconectar/bloquear clientes e ativar/desativar redes. Acesso por usuário e senha ou por **API key** (API oficial, com menos ações). Detalhes em [docs/UNIFI.md](docs/UNIFI.md).
+- **Ordens de serviço:** abertura e atribuição a técnicos; o técnico vê só as suas, inicia/pausa o cronômetro (tempo trabalhado contado pelo servidor), lança o que foi feito, os gastos (materiais e despesas) e fotos tiradas pelo celular. As fotos são reduzidas no próprio aparelho (lado maior 1600 px, sem a localização GPS) e guardadas no banco, entrando no mesmo backup.
 - Detalhes de transporte, versões e preparação dos roteadores: [docs/ROUTEROS.md](docs/ROUTEROS.md).
 
 ## Estrutura
@@ -164,6 +165,9 @@ As permissões são verificadas no backend em cada endpoint, por **funcionalidad
 | UniFi: ver antenas, clientes e redes | ✔ | ✔ | concessão individual |
 | UniFi: controlar (reiniciar, firmware, bloquear, redes) | ✔ | ✔ | concessão individual |
 | UniFi: cadastrar controladoras e credenciais | ✔ | concessão individual | — |
+| Ordens de serviço: executar as atribuídas a si (cronômetro, relatório, gastos, fotos) | ✔ | ✔ | concessão individual |
+| Ordens de serviço: ver todas | ✔ | concessão individual | ✔ |
+| Ordens de serviço: abrir, atribuir, editar, reabrir e cancelar | ✔ | concessão individual | ✔ |
 
 - Toda permissão pode ser concedida ou removida por usuário (exceto do administrador, que é sempre completo).
 - **Escopo:** “todos os clientes” ou uma lista de clientes. A MikroTik central só é visível para quem tem acesso a todos os clientes.

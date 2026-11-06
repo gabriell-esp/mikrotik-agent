@@ -13,6 +13,8 @@ import LoginPage from './pages/Login';
 import NotificationsPage from './pages/Notifications';
 import PppoePage from './pages/Pppoe';
 import PppoeDevicePage from './pages/PppoeDevice';
+import ServiceOrderPage from './pages/ServiceOrder';
+import ServiceOrdersPage from './pages/ServiceOrders';
 import UnifiPage from './pages/Unifi';
 import UnifiControllerPage from './pages/UnifiController';
 import UsersPage from './pages/Users';
@@ -29,6 +31,7 @@ export default function App() {
     );
   }
   if (user.mustChangePassword) return <ChangePasswordPage forced />;
+  const osAccess = ['os.view_all', 'os.manage', 'os.execute'].some((p) => can(p));
   return (
     <Routes>
       <Route element={<Layout />}>
@@ -41,6 +44,8 @@ export default function App() {
         {can('unifi.view') && <Route path="unifi/:id" element={<UnifiControllerPage />} />}
         {can('pppoe.view') && <Route path="pppoe" element={<PppoePage />} />}
         {can('pppoe.view') && <Route path="pppoe/:id" element={<PppoeDevicePage />} />}
+        {osAccess && <Route path="os" element={<ServiceOrdersPage />} />}
+        {osAccess && <Route path="os/:id" element={<ServiceOrderPage />} />}
         {can('audit.view') && <Route path="auditoria" element={<AuditPage />} />}
         {can('audit.view') && <Route path="auditoria/:key" element={<AuditDevicePage />} />}
         {can('users.manage') && <Route path="usuarios" element={<UsersPage />} />}

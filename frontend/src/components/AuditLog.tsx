@@ -22,6 +22,8 @@ export const ACTION_LABEL: Record<string, string> = {
   'unifi.device.restart': 'Antena reiniciada', 'unifi.device.upgrade': 'Firmware atualizado', 'unifi.device.locate': 'Localizar antena (LED)',
   'unifi.device.unlocate': 'Parar de localizar antena', 'unifi.client.kick': 'Cliente Wi-Fi reconectado', 'unifi.client.block': 'Cliente Wi-Fi bloqueado',
   'unifi.client.unblock': 'Cliente Wi-Fi desbloqueado', 'unifi.wlan.enable': 'Rede Wi-Fi ativada', 'unifi.wlan.disable': 'Rede Wi-Fi desativada',
+  'os.create': 'Ordem de serviço aberta', 'os.update': 'Ordem de serviço alterada', 'os.assign': 'Ordem de serviço atribuída',
+  'os.finish': 'Ordem de serviço concluída', 'os.reopen': 'Ordem de serviço reaberta', 'os.cancel': 'Ordem de serviço cancelada',
 };
 
 const FIELD_LABEL: Record<string, string> = {

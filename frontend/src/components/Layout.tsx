@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
-  BellRing, Building2, ChevronDown, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
+  BellRing, Building2, ChevronDown, ClipboardList, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
   Users, Waypoints, Wifi, X, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -11,6 +11,7 @@ import { useAuth } from '../lib/auth';
 import CommandPalette from './CommandPalette';
 import LiveIndicator from './LiveIndicator';
 
+/** perm: permissão exigida; com várias separadas por "|", basta ter uma. */
 interface NavItem { to: string; label: string; short?: string; icon: LucideIcon; perm: string }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
@@ -21,6 +22,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     { to: '/unifi', label: 'UniFi', icon: Wifi, perm: 'unifi.view' },
   ] },
   { title: 'Atendimento', items: [
+    { to: '/os', label: 'Ordens de serviço', short: 'OS', icon: ClipboardList, perm: 'os.view_all|os.manage|os.execute' },
     { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
     { to: '/clientes', label: 'Clientes', icon: Building2, perm: 'clients.view' },
   ] },
@@ -69,12 +71,12 @@ export default function Layout() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const sections = useMemo(
-    () => SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => can(i.perm)) })).filter((s) => s.items.length),
+    () => SECTIONS.map((s) => ({ ...s, items: s.items.filter((i) => i.perm.split('|').some((p) => can(p))) })).filter((s) => s.items.length),
     [can],
   );
   const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const bottomItems = useMemo(() => {
-    const prefer = ['/', '/equipamentos', '/pppoe', '/unifi', '/wireguard'];
+    const prefer = ['/', '/os', '/equipamentos', '/pppoe', '/unifi', '/wireguard'];
     return prefer.map((to) => allItems.find((i) => i.to === to)).filter(Boolean).slice(0, 4) as NavItem[];
   }, [allItems]);
   const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => (i.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(i.to)));

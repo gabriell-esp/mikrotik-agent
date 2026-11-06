@@ -12,6 +12,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { deviceRoutes } from './routes/devices.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { pppoeRoutes } from './routes/pppoe.js';
+import { serviceOrderRoutes } from './routes/service-orders.js';
 import { unifiRoutes } from './routes/unifi.js';
 import { userRoutes } from './routes/users.js';
 import { wireguardRoutes } from './routes/wireguard.js';
@@ -69,6 +70,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(auditRoutes);
   await app.register(notificationRoutes);
   await app.register(unifiRoutes);
+  await app.register(serviceOrderRoutes);
 
   return app;
 }
