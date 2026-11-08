@@ -370,6 +370,19 @@ export function Modal({ open, onClose, title, description, children, footer, wid
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [open, onClose]);
+  // Trava a rolagem da página atrás do modal (contador: modais podem abrir uns sobre os outros).
+  useEffect(() => {
+    if (!open) return;
+    const el = document.documentElement;
+    const n = Number(el.dataset.modals ?? 0) + 1;
+    el.dataset.modals = String(n);
+    el.classList.add('modal-open');
+    return () => {
+      const left = Number(el.dataset.modals ?? 1) - 1;
+      el.dataset.modals = String(left);
+      if (left <= 0) el.classList.remove('modal-open');
+    };
+  }, [open]);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/40 backdrop-blur-[2px] sm:items-center sm:p-4" onMouseDown={onClose}>
@@ -430,15 +443,21 @@ export function ConfirmDialog({
 }
 
 export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: ReactNode }[]; active: string; onChange: (k: string) => void }) {
+  // Sem rolagem lateral: no celular, etiquetas que quebram linha; a partir do tablet, abas sublinhadas (também quebram se faltar espaço).
   return (
-    <div className="-mx-4 flex gap-1 overflow-x-auto border-b border-slate-200 px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+    <div role="tablist" className="flex flex-wrap gap-1.5 md:gap-x-1 md:gap-y-0 md:border-b md:border-slate-200">
       {tabs.map((t) => (
         <button
           key={t.key}
+          role="tab"
+          aria-selected={active === t.key}
           onClick={() => onChange(t.key)}
           className={clsx(
-            '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:py-2.5',
-            active === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800',
+            'inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+            'md:-mb-px md:rounded-none md:border-0 md:border-b-2 md:px-3 md:py-2.5',
+            active === t.key
+              ? 'border-brand-600 bg-brand-600 text-white md:bg-transparent md:text-brand-700'
+              : 'border-slate-200 bg-white text-slate-600 md:border-transparent md:bg-transparent md:text-slate-500 md:hover:border-slate-300 md:hover:text-slate-800',
           )}
         >
           {t.label}

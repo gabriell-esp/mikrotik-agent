@@ -7,6 +7,7 @@ import { one, query, tx } from '../db/pool.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { idParam, optionalText, parse } from '../lib/validate.js';
 import { audit } from '../services/audit.js';
+import { phoneSchema } from './profile.js';
 
 const PRIORITIES = ['baixa', 'normal', 'alta', 'urgente'] as const;
 const OPEN = ['aberta', 'em_andamento', 'pausada'];
@@ -19,10 +20,17 @@ const orderSchema = z.object({
   description: optionalText(5000),
   client_id: z.number().int().positive().nullable().default(null),
   location: optionalText(300),
-  contact: optionalText(200),
+  /** Ao menos um contato no local; o técnico abre o WhatsApp direto pela ordem. */
+  contacts: z.array(z.object({
+    name: z.string().trim().min(2, 'Informe o nome do contato').max(100),
+    phone: phoneSchema,
+  })).min(1, 'Informe ao menos um contato com telefone').max(5, 'Máximo de 5 contatos').default([]),
   priority: z.enum(PRIORITIES).default('normal'),
   assigned_to: z.number().int().positive().nullable().default(null),
+  helper_id: z.number().int().positive().nullable().default(null),
   scheduled_for: z.string().datetime({ offset: true }).nullable().optional().transform((v) => v ?? null),
+}).refine((b) => !b.helper_id || (b.assigned_to && b.helper_id !== b.assigned_to), {
+  message: 'O técnico auxiliar deve ser diferente do responsável (e exige um responsável).', path: ['helper_id'],
 });
 
 /** Material usado (quantidade, sem valor) ou compra feita em loja durante o serviço (valor pago). */
@@ -54,7 +62,10 @@ const subId = (name: string) => z.object({ id: z.coerce.number().int().positive(
 
 /** Quem vê todas as ordens: permissão de ver todas ou de gerenciar (respeitando o escopo de clientes). */
 const seesAll = (u: AuthUser) => hasPerm(u, 'os.view_all') || hasPerm(u, 'os.manage');
-const isExecutor = (u: AuthUser, o: { assigned_to: number | null }) => hasPerm(u, 'os.execute') && o.assigned_to === u.id;
+type Crew = { assigned_to: number | null; helper_id?: number | null };
+/** Técnico da ordem: o responsável ou o auxiliar. */
+const isExecutor = (u: AuthUser, o: Crew) => hasPerm(u, 'os.execute') && (o.assigned_to === u.id || (o.helper_id != null && o.helper_id === u.id));
+const isPrincipal = (u: AuthUser, o: Crew) => hasPerm(u, 'os.execute') && o.assigned_to === u.id;
 
 function requireOsUser(req: FastifyRequest): AuthUser {
   const user = requireUser(req);
@@ -63,18 +74,19 @@ function requireOsUser(req: FastifyRequest): AuthUser {
   return user;
 }
 
-function canSee(u: AuthUser, o: { assigned_to: number | null; client_id: number | null }) {
+function canSee(u: AuthUser, o: Crew & { client_id: number | null }) {
   if (isExecutor(u, o)) return true;
   return seesAll(u) && (o.client_id == null || canAccessClient(u, o.client_id));
 }
 
 /** Pode lançar relatório, gastos e fotos: técnico responsável ou quem gerencia, enquanto a ordem está aberta. */
-function canWork(u: AuthUser, o: { assigned_to: number | null; status: string; client_id: number | null }) {
+function canWork(u: AuthUser, o: Crew & { status: string; client_id: number | null }) {
   return OPEN.includes(o.status) && (isExecutor(u, o) || (hasPerm(u, 'os.manage') && canSee(u, o)));
 }
 
 const BASE = `
-  SELECT o.*, c.name AS client_name, a.name AS assigned_name, cb.name AS created_by_name,
+  SELECT o.*, c.name AS client_name, a.name AS assigned_name, a.avatar_updated_at AS assigned_avatar, a.phone AS assigned_phone,
+         h.name AS helper_name, h.avatar_updated_at AS helper_avatar, cb.name AS created_by_name,
          COALESCE((SELECT sum(extract(epoch FROM (t.ended_at - t.started_at))) FROM service_order_time t
                     WHERE t.order_id = o.id AND t.ended_at IS NOT NULL), 0)::float8 AS work_seconds,
          (SELECT t.started_at FROM service_order_time t WHERE t.order_id = o.id AND t.ended_at IS NULL) AS running_since,
@@ -83,6 +95,7 @@ const BASE = `
     FROM service_orders o
     LEFT JOIN clients c ON c.id = o.client_id
     LEFT JOIN users a ON a.id = o.assigned_to
+    LEFT JOIN users h ON h.id = o.helper_id
     LEFT JOIN users cb ON cb.id = o.created_by`;
 
 function present(o: any) {
@@ -117,11 +130,11 @@ async function stopClock(db: Db, orderId: number) {
 
 const label = (o: { id: number; title: string }) => `OS #${o.id} · ${o.title}`;
 
-async function validateAssignee(userId: number | null) {
+async function validateAssignee(userId: number | null, what = 'O responsável escolhido') {
   if (userId == null) return null;
   const u = await one('SELECT id, name, role, permissions_grant, permissions_revoke FROM users WHERE id = $1 AND active', [userId]);
   if (!u || !effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke).has('os.execute')) {
-    throw badRequest('O responsável escolhido não pode executar ordens de serviço.');
+    throw badRequest(`${what} não pode executar ordens de serviço.`);
   }
   return u as { id: number; name: string };
 }
@@ -152,14 +165,14 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     const params: unknown[] = [];
     if (!seesAll(user) || qs.mine === '1') {
       params.push(user.id);
-      where.push(`o.assigned_to = $${params.length}`);
+      where.push(`(o.assigned_to = $${params.length} OR o.helper_id = $${params.length})`);
     } else if (!user.allClients) {
       params.push(user.clientIds, user.id);
-      where.push(`(o.client_id IS NULL OR o.client_id = ANY($${params.length - 1}::int[]) OR o.assigned_to = $${params.length})`);
+      where.push(`(o.client_id IS NULL OR o.client_id = ANY($${params.length - 1}::int[]) OR o.assigned_to = $${params.length} OR o.helper_id = $${params.length})`);
     }
     if (qs.assigned && seesAll(user)) {
       params.push(qs.assigned);
-      where.push(`o.assigned_to = $${params.length}`);
+      where.push(`(o.assigned_to = $${params.length} OR o.helper_id = $${params.length})`);
     }
     if (qs.q) {
       params.push(`%${qs.q}%`, qs.q.replace(/^#/, ''));
@@ -185,14 +198,28 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
   });
 
   /** Usuários que podem receber ordens (ativos e com permissão de executar). */
-  app.get('/api/os/assignees', async (req) => {
-    requirePerm(req, 'os.manage');
-    const users = await query('SELECT id, name, username, role, permissions_grant, permissions_revoke FROM users WHERE active ORDER BY name');
-    const open = await query(`SELECT assigned_to, count(*)::int AS n FROM service_orders WHERE status = ANY('{aberta,em_andamento,pausada}') AND assigned_to IS NOT NULL GROUP BY assigned_to`);
-    const load = new Map(open.map((r) => [r.assigned_to, r.n]));
+  async function executors() {
+    const users = await query('SELECT id, name, username, role, permissions_grant, permissions_revoke, avatar_updated_at FROM users WHERE active ORDER BY name');
+    const open = await query(
+      `SELECT u AS user_id, count(*)::int AS n FROM service_orders, unnest(ARRAY[assigned_to, helper_id]) AS u
+        WHERE status = ANY('{aberta,em_andamento,pausada}') AND u IS NOT NULL GROUP BY u`,
+    );
+    const load = new Map(open.map((r) => [r.user_id, r.n]));
     return users
       .filter((u) => effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke).has('os.execute'))
-      .map((u) => ({ id: u.id, name: u.name, username: u.username, open: load.get(u.id) ?? 0 }));
+      .map((u) => ({ id: u.id, name: u.name, username: u.username, avatar_updated_at: u.avatar_updated_at, open: load.get(u.id) ?? 0 }));
+  }
+
+  app.get('/api/os/assignees', async (req) => {
+    requirePerm(req, 'os.manage');
+    return executors();
+  });
+
+  /** Técnicos que o responsável pode chamar como companheiro nesta ordem. */
+  app.get('/api/os/:id/helper-options', async (req) => {
+    const { user, order } = await orderFromRequest(req);
+    if (!isPrincipal(user, order) && !hasPerm(user, 'os.manage')) throw forbidden();
+    return (await executors()).filter((u) => u.id !== order.assigned_to);
   });
 
   app.get('/api/os/:id', async (req) => {
@@ -203,14 +230,19 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
       query('SELECT id, at, username, kind, details FROM service_order_events WHERE order_id = $1 ORDER BY at, id', [order.id]),
     ]);
     const manage = hasPerm(user, 'os.manage');
+    const mine = order.assigned_to === user.id ? 'assigned' : order.helper_id === user.id ? 'helper' : null;
     return {
       ...order, items, photos, events,
       can: {
         manage,
         execute: isExecutor(user, order),
+        principal: isPrincipal(user, order),
         work: canWork(user, order),
         edit: manage && OPEN.includes(order.status),
+        setHelper: OPEN.includes(order.status) && !!order.assigned_to && (isPrincipal(user, order) || manage),
         deletePhotoOf: manage ? 'all' : 'own',
+        /** Já confirmou a finalização (ordens com dois técnicos). */
+        confirmed: mine === 'assigned' ? !!order.assigned_done_at : mine === 'helper' ? !!order.helper_done_at : false,
       },
     };
   });
@@ -220,14 +252,15 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     const b = parse(orderSchema, req.body);
     if (b.client_id && !canAccessClient(user, b.client_id)) throw forbidden('Você não tem acesso a esse cliente.');
     const assignee = await validateAssignee(b.assigned_to);
+    const helper = await validateAssignee(b.helper_id, 'O técnico auxiliar');
     const o = await tx(async (c) => {
       const r = await c.query(
-        `INSERT INTO service_orders(title, description, client_id, location, contact, priority, assigned_to, scheduled_for, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, title, client_id`,
-        [b.title, b.description, b.client_id, b.location, b.contact, b.priority, b.assigned_to, b.scheduled_for, user.id],
+        `INSERT INTO service_orders(title, description, client_id, location, contacts, priority, assigned_to, helper_id, scheduled_for, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, title, client_id`,
+        [b.title, b.description, b.client_id, b.location, JSON.stringify(b.contacts), b.priority, b.assigned_to, b.helper_id, b.scheduled_for, user.id],
       );
       const row = r.rows[0];
-      await event(c, row.id, user, 'criada', assignee ? { assigned: assignee.name } : undefined);
+      await event(c, row.id, user, 'criada', assignee ? { assigned: assignee.name, helper: helper?.name ?? null } : undefined);
       return row;
     });
     await audit(req, { action: 'os.create', clientId: o.client_id, target: label(o), details: { assigned: assignee?.name ?? null, priority: b.priority } });
@@ -241,33 +274,64 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     const b = parse(orderSchema, req.body);
     if (b.client_id && b.client_id !== order.client_id && !canAccessClient(user, b.client_id)) throw forbidden('Você não tem acesso a esse cliente.');
     const reassigned = b.assigned_to !== order.assigned_to;
+    const helperChanged = b.helper_id !== order.helper_id;
     const assignee = reassigned ? await validateAssignee(b.assigned_to) : null;
+    const helper = helperChanged ? await validateAssignee(b.helper_id, 'O técnico auxiliar') : null;
     await tx(async (c) => {
       // Troca de responsável com o cronômetro rodando: encerra o período atual e deixa a ordem pausada.
       const pause = reassigned && order.status === 'em_andamento';
       if (pause) await stopClock(c, order.id);
+      // Mudou a equipe: as confirmações de finalização recomeçam.
       await c.query(
-        `UPDATE service_orders SET title=$2, description=$3, client_id=$4, location=$5, contact=$6, priority=$7, assigned_to=$8, scheduled_for=$9,
-                status = CASE WHEN $10 THEN 'pausada' ELSE status END, updated_at = now() WHERE id = $1`,
-        [order.id, b.title, b.description, b.client_id, b.location, b.contact, b.priority, b.assigned_to, b.scheduled_for, pause],
+        `UPDATE service_orders SET title=$2, description=$3, client_id=$4, location=$5, contacts=$6, priority=$7, assigned_to=$8, helper_id=$9, scheduled_for=$10,
+                status = CASE WHEN $11 THEN 'pausada' ELSE status END,
+                assigned_done_at = CASE WHEN $12 THEN NULL ELSE assigned_done_at END,
+                helper_done_at = CASE WHEN $12 THEN NULL ELSE helper_done_at END,
+                updated_at = now() WHERE id = $1`,
+        [order.id, b.title, b.description, b.client_id, b.location, JSON.stringify(b.contacts), b.priority, b.assigned_to, b.helper_id, b.scheduled_for, pause, reassigned || helperChanged],
       );
-      await event(c, order.id, user, reassigned ? 'atribuida' : 'editada', reassigned ? { from: order.assigned_name, to: assignee?.name ?? null } : undefined);
+      if (reassigned) await event(c, order.id, user, 'atribuida', { from: order.assigned_name, to: assignee?.name ?? null });
+      if (helperChanged) await event(c, order.id, user, 'auxiliar', { from: order.helper_name, to: helper?.name ?? null });
+      if (!reassigned && !helperChanged) await event(c, order.id, user, 'editada');
     });
     await audit(req, { action: reassigned ? 'os.assign' : 'os.update', clientId: b.client_id, target: label({ id: order.id, title: b.title }), details: reassigned ? { from: order.assigned_name, to: assignee?.name ?? null } : null });
     return loadOrder(order.id);
   });
 
-  // ---- execução (técnico responsável)
+  app.post('/api/os/:id/helper', async (req) => {
+    const { user, order } = await orderFromRequest(req);
+    if (!isPrincipal(user, order) && !hasPerm(user, 'os.manage')) throw forbidden('Somente o técnico responsável ou quem gerencia pode definir o companheiro.');
+    if (!OPEN.includes(order.status)) throw badRequest('A ordem já foi encerrada.');
+    if (!order.assigned_to) throw badRequest('Atribua um técnico responsável antes.');
+    const b = parse(z.object({ helper_id: z.number().int().positive().nullable() }), req.body);
+    if (b.helper_id === order.assigned_to) throw badRequest('O companheiro deve ser outro técnico.');
+    const helper = await validateAssignee(b.helper_id, 'O companheiro escolhido');
+    await tx(async (c) => {
+      await c.query('UPDATE service_orders SET helper_id=$2, assigned_done_at=NULL, helper_done_at=NULL, updated_at=now() WHERE id=$1', [order.id, b.helper_id]);
+      await event(c, order.id, user, 'auxiliar', { from: order.helper_name, to: helper?.name ?? null });
+    });
+    await audit(req, { action: 'os.helper', clientId: order.client_id, target: label(order), details: { from: order.helper_name, to: helper?.name ?? null } });
+    return loadOrder(order.id);
+  });
+
+  // ---- execução (técnicos da ordem)
 
   app.post('/api/os/:id/start', async (req) => {
     const { user, order } = await orderFromRequest(req);
-    if (!isExecutor(user, order)) throw forbidden('Somente o técnico responsável pode iniciar esta ordem.');
+    if (!isExecutor(user, order)) throw forbidden('Somente os técnicos da ordem podem iniciá-la.');
     if (!['aberta', 'pausada'].includes(order.status)) throw badRequest('A ordem não está aguardando início.');
-    const running = await one(`SELECT id, title FROM service_orders WHERE assigned_to = $1 AND status = 'em_andamento' AND id <> $2`, [user.id, order.id]);
+    const running = await one(
+      `SELECT id FROM service_orders WHERE (assigned_to = $1 OR helper_id = $1) AND status = 'em_andamento' AND id <> $2`,
+      [user.id, order.id],
+    );
     if (running) throw conflict(`Você já está com a OS #${running.id} em andamento. Pause-a antes de iniciar outra.`);
     await tx(async (c) => {
       await c.query('INSERT INTO service_order_time(order_id, user_id) VALUES ($1,$2)', [order.id, user.id]);
-      await c.query(`UPDATE service_orders SET status = 'em_andamento', started_at = COALESCE(started_at, now()), updated_at = now() WHERE id = $1`, [order.id]);
+      // Voltou a trabalhar: confirmações de finalização anteriores deixam de valer.
+      await c.query(
+        `UPDATE service_orders SET status = 'em_andamento', started_at = COALESCE(started_at, now()), assigned_done_at = NULL, helper_done_at = NULL, updated_at = now() WHERE id = $1`,
+        [order.id],
+      );
       await event(c, order.id, user, order.started_at ? 'retomada' : 'iniciada');
     });
     return loadOrder(order.id);
@@ -295,16 +359,34 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
 
   app.post('/api/os/:id/finish', async (req) => {
     const { user, order } = await orderFromRequest(req);
-    if (!isExecutor(user, order) && !hasPerm(user, 'os.manage')) throw forbidden('Somente o técnico responsável pode finalizar esta ordem.');
+    const duo = !!order.helper_id;
+    // Em dupla, cada técnico confirma a própria parte; sem auxiliar, o responsável ou quem gerencia conclui.
+    if (duo ? !isExecutor(user, order) : !isExecutor(user, order) && !hasPerm(user, 'os.manage')) {
+      throw forbidden(duo ? 'Esta ordem tem dois técnicos: cada um deles confirma a finalização.' : 'Somente o técnico responsável pode finalizar esta ordem.');
+    }
     if (!['em_andamento', 'pausada'].includes(order.status)) throw badRequest(order.status === 'aberta' ? 'Inicie a ordem antes de finalizar.' : 'A ordem já foi encerrada.');
-    const b = parse(z.object({ report: z.string().trim().min(5, 'Descreva o que foi feito').max(10000) }), req.body);
+    const b = parse(z.object({ report: z.string().trim().max(10000).optional() }), req.body);
+    const report = b.report || order.report;
+    if (!report || report.trim().length < 5) throw badRequest('Descreva o que foi feito.');
+    const role = order.assigned_to === user.id ? 'assigned' : order.helper_id === user.id ? 'helper' : null;
+    const assignedDone = !duo || role === 'assigned' || !!order.assigned_done_at;
+    const helperDone = !duo || role === 'helper' || !!order.helper_done_at;
+    const complete = assignedDone && helperDone;
     await tx(async (c) => {
       await stopClock(c, order.id);
-      await c.query(`UPDATE service_orders SET status = 'concluida', report = $2, finished_at = now(), updated_at = now() WHERE id = $1`, [order.id, b.report]);
-      await event(c, order.id, user, 'concluida');
+      await c.query(
+        `UPDATE service_orders SET report = $2,
+                assigned_done_at = CASE WHEN $3 THEN COALESCE(assigned_done_at, now()) ELSE assigned_done_at END,
+                helper_done_at = CASE WHEN $4 THEN COALESCE(helper_done_at, now()) ELSE helper_done_at END,
+                status = CASE WHEN $5 THEN 'concluida' ELSE 'pausada' END,
+                finished_at = CASE WHEN $5 THEN now() ELSE NULL END, updated_at = now() WHERE id = $1`,
+        [order.id, report, duo && role === 'assigned', duo && role === 'helper', complete],
+      );
+      if (duo) await event(c, order.id, user, 'finalizacao_confirmada');
+      if (complete) await event(c, order.id, user, 'concluida');
     });
     const done = await loadOrder(order.id);
-    await audit(req, { action: 'os.finish', clientId: order.client_id, target: label(order), details: { work_seconds: done.work_seconds, total_cost: done.total_cost } });
+    if (complete) await audit(req, { action: 'os.finish', clientId: order.client_id, target: label(order), details: { work_seconds: done.work_seconds, total_cost: done.total_cost } });
     return done;
   });
 
@@ -316,7 +398,10 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
     if (!['concluida', 'cancelada'].includes(order.status)) throw badRequest('A ordem não está encerrada.');
     const next = order.started_at ? 'pausada' : 'aberta';
     await tx(async (c) => {
-      await c.query(`UPDATE service_orders SET status = $2, finished_at = NULL, cancel_reason = NULL, updated_at = now() WHERE id = $1`, [order.id, next]);
+      await c.query(
+        `UPDATE service_orders SET status = $2, finished_at = NULL, cancel_reason = NULL, assigned_done_at = NULL, helper_done_at = NULL, updated_at = now() WHERE id = $1`,
+        [order.id, next],
+      );
       await event(c, order.id, user, 'reaberta');
     });
     await audit(req, { action: 'os.reopen', clientId: order.client_id, target: label(order) });

@@ -1,13 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
-  BellRing, Building2, ChevronDown, ClipboardList, ListTodo, ChevronsLeft, ChevronsRight, KeyRound, LayoutDashboard, LogOut, Menu, Network, Router, ScrollText, Search,
-  Users, Waypoints, Wifi, X, type LucideIcon,
+  BellRing, Building2, ChevronDown, ChevronsLeft, ChevronsRight, ClipboardList, KeyRound, LayoutDashboard, ListTodo, LogOut, Menu, Network, Router,
+  ScrollText, Search, UserRound, Users, Waypoints, Wifi, X, type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { post } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import Avatar from './Avatar';
 import CommandPalette from './CommandPalette';
 import LiveIndicator from './LiveIndicator';
 
@@ -22,7 +23,7 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
     { to: '/unifi', label: 'UniFi', icon: Wifi, perm: 'unifi.view' },
   ] },
   { title: 'Atendimento', items: [
-    { to: '/os', label: 'Ordens de serviço', short: 'OS', icon: ClipboardList, perm: 'os.view_all|os.manage|os.execute' },
+    { to: '/os', label: 'Ordens de serviço', short: 'Ordens', icon: ClipboardList, perm: 'os.view_all|os.manage|os.execute' },
     { to: '/planejamento', label: 'Planejamento', icon: ListTodo, perm: 'planner.manage' },
     { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
     { to: '/clientes', label: 'Clientes', icon: Building2, perm: 'clients.view' },
@@ -34,6 +35,8 @@ const SECTIONS: { title: string; items: NavItem[] }[] = [
   ] },
 ];
 
+const PAGE_LABELS: Record<string, string> = { '/senha': 'Alterar senha', '/perfil': 'Meu perfil' };
+
 function readCollapsed(): boolean {
   try {
     return localStorage.getItem('slot1.sidebar') === 'collapsed';
@@ -42,13 +45,9 @@ function readCollapsed(): boolean {
   }
 }
 
-function initials(name = '') {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join('');
-}
-
 function Brand({ compact }: { compact?: boolean }) {
   return (
-    <div className={clsx('flex h-16 items-center gap-3', compact ? 'justify-center px-0' : 'px-5')}>
+    <div className={clsx('flex h-16 shrink-0 items-center gap-3', compact ? 'justify-center px-0' : 'px-5')}>
       <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-lg shadow-brand-900/40">S1</div>
       {!compact && (
         <div className="leading-tight">
@@ -60,12 +59,14 @@ function Brand({ compact }: { compact?: boolean }) {
   );
 }
 
+const isActivePath = (to: string, path: string) => (to === '/' ? path === '/' : path === to || path.startsWith(`${to}/`));
+
 export default function Layout() {
   const { user, can } = useAuth();
   const qc = useQueryClient();
   const nav = useNavigate();
   const loc = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [fab, setFab] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [palette, setPalette] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -76,22 +77,22 @@ export default function Layout() {
     [can],
   );
   const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
-  const bottomItems = useMemo(() => {
-    const prefer = ['/', '/os', '/equipamentos', '/pppoe', '/unifi', '/wireguard'];
-    return prefer.map((to) => allItems.find((i) => i.to === to)).filter(Boolean).slice(0, 4) as NavItem[];
-  }, [allItems]);
-  const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => (i.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(i.to)));
-  const moreActive = !!activeItem && !bottomItems.includes(activeItem);
-  const currentLabel = loc.pathname === '/senha' ? 'Alterar senha' : activeItem?.label ?? 'Slot1';
-  const pages = useMemo(() => sections.flatMap((s) => s.items).map((i) => ({ to: i.to, label: i.label, icon: <i.icon className="size-4" /> })), [sections]);
+  const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => isActivePath(i.to, loc.pathname));
+  const currentLabel = PAGE_LABELS[loc.pathname] ?? activeItem?.label ?? 'Slot1';
+  const pages = useMemo(() => allItems.map((i) => ({ to: i.to, label: i.label, icon: <i.icon className="size-4" /> })), [allItems]);
 
-  useEffect(() => setMobileOpen(false), [loc.pathname]);
+  // Página nova começa do topo (a rolagem é a da própria página).
+  useEffect(() => {
+    setFab(false);
+    window.scrollTo({ top: 0 });
+  }, [loc.pathname]);
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette(true);
       }
+      if (e.key === 'Escape') setFab(false);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -118,47 +119,45 @@ export default function Layout() {
     window.location.href = '/';
   };
 
-  const navList = (compact: boolean) => (
-    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {sections.map((s) => (
-        <div key={s.title}>
-          {!compact && <div className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{s.title}</div>}
-          <div className="space-y-0.5">
-            {s.items.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                title={compact ? n.label : undefined}
-                className={({ isActive }) =>
-                  clsx(
-                    'group relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
-                    compact ? 'justify-center px-0' : 'px-3',
-                    isActive ? 'bg-white/[0.08] text-white' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-100',
-                  )
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-full bg-brand-500" />}
-                    <n.icon className={clsx('size-[18px] shrink-0', isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300')} />
-                    {!compact && n.label}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        </div>
-      ))}
-    </nav>
-  );
+  const me = <Avatar id={user?.id} name={user?.name} version={user?.avatarUpdatedAt} />;
 
   return (
-    <div className="flex h-full">
-      {/* Barra lateral (desktop) */}
-      <aside className={clsx('hidden shrink-0 flex-col bg-slate-950 transition-[width] duration-200 lg:flex', collapsed ? 'w-[72px]' : 'w-64')}>
+    <div className="flex min-h-dvh">
+      {/* Barra lateral (computador): fixa enquanto a página rola */}
+      <aside className={clsx('sticky top-0 hidden h-dvh shrink-0 flex-col bg-slate-950 transition-[width] duration-200 lg:flex', collapsed ? 'w-[72px]' : 'w-64')}>
         <Brand compact={collapsed} />
-        {navList(collapsed)}
+        <nav className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {sections.map((s) => (
+            <div key={s.title}>
+              {!collapsed && <div className="mb-2 px-3 text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{s.title}</div>}
+              <div className="space-y-0.5">
+                {s.items.map((n) => (
+                  <NavLink
+                    key={n.to}
+                    to={n.to}
+                    end={n.to === '/'}
+                    title={collapsed ? n.label : undefined}
+                    className={({ isActive }) =>
+                      clsx(
+                        'group relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors',
+                        collapsed ? 'justify-center px-0' : 'px-3',
+                        isActive ? 'bg-white/[0.08] text-white' : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-100',
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        {isActive && <span className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-full bg-brand-500" />}
+                        <n.icon className={clsx('size-[18px] shrink-0', isActive ? 'text-brand-400' : 'text-slate-500 group-hover:text-slate-300')} />
+                        {!collapsed && n.label}
+                      </>
+                    )}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
         <div className="border-t border-white/5 p-3">
           <button
             onClick={toggleCollapsed}
@@ -169,35 +168,6 @@ export default function Layout() {
           </button>
         </div>
       </aside>
-
-      {/* Menu completo (celular) */}
-      {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-[2px]" onClick={() => setMobileOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col rounded-t-3xl bg-slate-950 pb-[env(safe-area-inset-bottom)] shadow-2xl">
-            <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-white/15" aria-hidden />
-            <div className="flex items-center justify-between gap-3 px-5 pt-3 pb-1">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-semibold text-white">{initials(user?.name)}</span>
-                <div className="min-w-0 leading-tight">
-                  <div className="truncate font-medium text-white">{user?.name}</div>
-                  <div className="truncate text-xs text-slate-400">{user?.username} · {user?.roleLabel}</div>
-                </div>
-              </div>
-              <button onClick={() => setMobileOpen(false)} className="flex size-10 items-center justify-center rounded-full bg-white/5 text-slate-300" aria-label="Fechar menu"><X className="size-5" /></button>
-            </div>
-            <div className="overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{navList(false)}</div>
-            <div className="grid grid-cols-2 gap-2 border-t border-white/5 p-3">
-              <button onClick={() => { setMobileOpen(false); nav('/senha'); }} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white/5 text-sm font-medium text-slate-200 active:bg-white/10">
-                <KeyRound className="size-4" /> Alterar senha
-              </button>
-              <button onClick={logout} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-red-500/10 text-sm font-medium text-red-300 active:bg-red-500/20">
-                <LogOut className="size-4" /> Sair
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-md sm:h-16 sm:gap-3 sm:px-6">
@@ -218,7 +188,7 @@ export default function Layout() {
             <LiveIndicator />
             <div className="relative hidden lg:block" ref={menuRef}>
               <button onClick={() => setMenu((m) => !m)} className="flex items-center gap-2 rounded-lg p-1 pr-1.5 hover:bg-slate-100" aria-label="Menu do usuário">
-                <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-xs font-semibold text-white">{initials(user?.name)}</span>
+                {me}
                 <span className="hidden text-left leading-tight md:block">
                   <span className="block text-sm font-medium text-slate-800">{user?.name}</span>
                   <span className="block text-xs text-slate-500">{user?.roleLabel}</span>
@@ -231,6 +201,9 @@ export default function Layout() {
                     <div className="truncate text-sm font-medium text-slate-800">{user?.name}</div>
                     <div className="truncate text-xs text-slate-500">{user?.username} · {user?.roleLabel}</div>
                   </div>
+                  <button onClick={() => { setMenu(false); nav('/perfil'); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                    <UserRound className="size-4 text-slate-400" /> Meu perfil
+                  </button>
                   <button onClick={() => { setMenu(false); nav('/senha'); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
                     <KeyRound className="size-4 text-slate-400" /> Alterar senha
                   </button>
@@ -242,38 +215,83 @@ export default function Layout() {
             </div>
           </div>
         </header>
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div className="mx-auto max-w-[1600px] px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-6 lg:p-8">
+        {/* overflow-x-clip: corta sobras laterais sem criar outra área de rolagem */}
+        <main className="min-w-0 flex-1 overflow-x-clip">
+          <div className="mx-auto max-w-[1600px] px-4 pt-4 pb-28 sm:px-6 sm:pt-6 lg:p-8">
             <Outlet />
           </div>
         </main>
+      </div>
 
-        {/* Navegação inferior (celular/tablet) */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">
-          <div className="mx-auto flex max-w-lg items-stretch justify-around px-1">
-            {bottomItems.map((n) => (
-              <NavLink
-                key={n.to}
-                to={n.to}
-                end={n.to === '/'}
-                className={({ isActive }) => clsx('flex min-w-0 flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] font-medium transition-colors', isActive ? 'text-brand-600' : 'text-slate-500')}
-              >
-                {({ isActive }) => (
-                  <>
-                    <span className={clsx('flex h-7 w-12 items-center justify-center rounded-full transition-colors', isActive && 'bg-brand-50')}>
-                      <n.icon className="size-5" strokeWidth={isActive ? 2.25 : 1.75} />
-                    </span>
-                    <span className="truncate">{n.short ?? n.label}</span>
-                  </>
-                )}
-              </NavLink>
+      {/* Menu flutuante (celular/tablet): botão redondo no canto inferior direito */}
+      <div className="lg:hidden">
+        <div
+          className={clsx('fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] transition-opacity duration-200', fab ? 'opacity-100' : 'pointer-events-none opacity-0')}
+          onClick={() => setFab(false)}
+          aria-hidden
+        />
+        <div
+          className={clsx(
+            'fixed right-4 bottom-[calc(5.5rem+env(safe-area-inset-bottom))] z-50 flex max-h-[calc(100dvh-8rem)] w-[min(22rem,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-3xl bg-slate-950 shadow-2xl ring-1 ring-white/10 transition duration-200',
+            fab ? 'scale-100 opacity-100' : 'pointer-events-none scale-90 opacity-0',
+          )}
+          role="dialog"
+          aria-label="Menu"
+          aria-hidden={!fab}
+        >
+          <button onClick={() => nav('/perfil')} className="flex items-center gap-3 border-b border-white/5 px-4 py-3 text-left active:bg-white/5">
+            <Avatar id={user?.id} name={user?.name} version={user?.avatarUpdatedAt} size="md" />
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate font-medium text-white">{user?.name}</span>
+              <span className="block truncate text-xs text-slate-400">Meu perfil · {user?.roleLabel}</span>
+            </span>
+          </button>
+          <div className="overflow-y-auto overscroll-contain p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {sections.map((s) => (
+              <div key={s.title} className="mb-3 last:mb-0">
+                <div className="mb-1.5 px-1 text-[10px] font-semibold tracking-wider text-slate-500 uppercase">{s.title}</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {s.items.map((n) => {
+                    const active = isActivePath(n.to, loc.pathname);
+                    return (
+                      <NavLink
+                        key={n.to}
+                        to={n.to}
+                        end={n.to === '/'}
+                        className={clsx(
+                          'flex flex-col items-center gap-1.5 rounded-2xl px-1 py-2.5 text-center text-[11px] leading-tight font-medium transition active:scale-95',
+                          active ? 'bg-brand-600 text-white' : 'bg-white/[0.04] text-slate-300',
+                        )}
+                      >
+                        <n.icon className="size-5" />
+                        <span className="line-clamp-2">{n.short ?? n.label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
-            <button onClick={() => setMobileOpen(true)} className={clsx('flex min-w-0 flex-1 flex-col items-center gap-1 pt-2.5 pb-2 text-[11px] font-medium', moreActive ? 'text-brand-600' : 'text-slate-500')}>
-              <span className={clsx('flex h-7 w-12 items-center justify-center rounded-full', moreActive && 'bg-brand-50')}><Menu className="size-5" /></span>
-              Menu
+          </div>
+          <div className="grid grid-cols-2 gap-2 border-t border-white/5 p-3">
+            <button onClick={() => nav('/senha')} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-white/5 text-sm font-medium text-slate-200 active:bg-white/10">
+              <KeyRound className="size-4" /> Senha
+            </button>
+            <button onClick={logout} className="flex h-11 items-center justify-center gap-2 rounded-xl bg-red-500/10 text-sm font-medium text-red-300 active:bg-red-500/20">
+              <LogOut className="size-4" /> Sair
             </button>
           </div>
-        </nav>
+        </div>
+        <button
+          onClick={() => setFab((f) => !f)}
+          aria-label={fab ? 'Fechar menu' : 'Abrir menu'}
+          aria-expanded={fab}
+          className={clsx(
+            'fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 flex size-14 items-center justify-center rounded-full text-white shadow-xl shadow-brand-900/30 transition duration-200 active:scale-95',
+            fab ? 'rotate-90 bg-slate-900' : 'bg-gradient-to-br from-brand-500 to-brand-700',
+          )}
+        >
+          {fab ? <X className="size-6" /> : <Menu className="size-6" />}
+        </button>
       </div>
 
       <CommandPalette open={palette} onClose={() => setPalette(false)} pages={pages} />

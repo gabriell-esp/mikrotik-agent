@@ -26,6 +26,7 @@ export function publicUser(u: AuthUser) {
     allClients: u.allClients,
     clientIds: u.clientIds,
     mustChangePassword: u.mustChangePassword,
+    avatarUpdatedAt: u.avatarUpdatedAt,
   };
 }
 

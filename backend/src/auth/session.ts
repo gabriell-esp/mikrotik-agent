@@ -16,6 +16,8 @@ export interface AuthUser {
   allClients: boolean;
   clientIds: number[];
   mustChangePassword: boolean;
+  /** Versão da foto de perfil (null = sem foto). */
+  avatarUpdatedAt: string | null;
   sessionId: string;
 }
 
@@ -49,7 +51,8 @@ export async function destroySession(req: FastifyRequest, reply: FastifyReply): 
 
 export async function loadUserById(userId: number, sessionId = ''): Promise<AuthUser | undefined> {
   const u = await one(
-    `SELECT u.*, COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
+    `SELECT u.id, u.username, u.name, u.role, u.permissions_grant, u.permissions_revoke, u.all_clients, u.must_change_password, u.avatar_updated_at,
+            COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
        FROM users u LEFT JOIN user_clients uc ON uc.user_id = u.id
       WHERE u.id = $1 AND u.active GROUP BY u.id`,
     [userId],
@@ -64,6 +67,7 @@ export async function loadUserById(userId: number, sessionId = ''): Promise<Auth
     allClients: u.role === 'admin' || u.all_clients,
     clientIds: u.client_ids,
     mustChangePassword: u.must_change_password,
+    avatarUpdatedAt: u.avatar_updated_at ? new Date(u.avatar_updated_at).toISOString() : null,
     sessionId,
   };
 }

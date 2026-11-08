@@ -411,7 +411,7 @@ export default function UnifiControllerPage() {
       </div>
 
       {sites.length > 1 && (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
+        <div className="flex flex-wrap gap-2">
           {sites.map((x) => (
             <button
               key={x.name}

@@ -12,6 +12,7 @@ export interface Me {
   allClients: boolean;
   clientIds: number[];
   mustChangePassword: boolean;
+  avatarUpdatedAt: string | null;
 }
 
 interface AuthState {

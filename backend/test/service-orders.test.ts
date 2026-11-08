@@ -32,6 +32,9 @@ async function newUser(username: string, role: string, extra: Record<string, unk
   return r.body.id as number;
 }
 
+// Contato padrão das ordens (obrigatório).
+const C = [{ name: 'Sr. João (síndico)', phone: '(49) 99999-0000' }];
+
 // JPEG mínimo (cabeçalho válido) para os testes de upload.
 const jpeg = (n = 2000) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, 7)]).toString('base64');
 
@@ -65,18 +68,18 @@ describe('abertura e atribuição', () => {
   it('lista de responsáveis traz só quem executa ordens; escritório pode abrir, técnico não', async () => {
     const a = await call('GET', '/api/os/assignees');
     expect(a.body.map((u: any) => u.username).sort()).toEqual(['admin', 'tec', 'tec2']);
-    expect((await call('POST', '/api/os', { title: 'Sem permissão' }, 'tec')).status).toBe(403);
-    expect((await call('POST', '/api/os', { title: 'Para o escritório', assigned_to: ids.esc })).status).toBe(400);
-    const e = await call('POST', '/api/os', { title: 'Aberta pelo escritório', client_id: ids.client, assigned_to: ids.tec2 }, 'esc');
+    expect((await call('POST', '/api/os', { contacts: C, title: 'Sem permissão' }, 'tec')).status).toBe(403);
+    expect((await call('POST', '/api/os', { contacts: C, title: 'Para o escritório', assigned_to: ids.esc })).status).toBe(400);
+    const e = await call('POST', '/api/os', { contacts: C, title: 'Aberta pelo escritório', client_id: ids.client, assigned_to: ids.tec2 }, 'esc');
     expect(e.status, JSON.stringify(e.body)).toBe(200);
     expect(e.body).toMatchObject({ status: 'aberta', assigned_name: 'TEC2', created_by_name: 'ESC', client_name: 'Condomínio Alfa' });
   });
 
   it('técnico vê só as ordens atribuídas a ele; escritório não vê cliente fora do escopo', async () => {
-    const o = await call('POST', '/api/os', { title: 'Trocar antena do bloco B', description: 'Sem sinal no 3º andar', client_id: ids.client, priority: 'alta', assigned_to: ids.tec, location: 'Bloco B' });
+    const o = await call('POST', '/api/os', { contacts: C, title: 'Trocar antena do bloco B', description: 'Sem sinal no 3º andar', client_id: ids.client, priority: 'alta', assigned_to: ids.tec, location: 'Bloco B' });
     expect(o.status).toBe(200);
     ids.os = o.body.id;
-    ids.beta = (await call('POST', '/api/os', { title: 'Visita no Beta', client_id: ids.other })).body.id;
+    ids.beta = (await call('POST', '/api/os', { contacts: C, title: 'Visita no Beta', client_id: ids.other })).body.id;
     const mine = await call('GET', '/api/os', undefined, 'tec');
     expect(mine.body.rows.map((r: any) => r.id)).toEqual([ids.os]);
     expect((await call('GET', `/api/os/${ids.os}`, undefined, 'tec2')).status).toBe(403);
@@ -97,7 +100,7 @@ describe('execução pelo técnico', () => {
     expect(st.status).toBe(200);
     expect(st.body.status).toBe('em_andamento');
     expect(st.body.running_since).toBeTruthy();
-    ids.os2 = (await call('POST', '/api/os', { title: 'Segunda ordem', client_id: ids.client, assigned_to: ids.tec })).body.id;
+    ids.os2 = (await call('POST', '/api/os', { contacts: C, title: 'Segunda ordem', client_id: ids.client, assigned_to: ids.tec })).body.id;
     const two = await call('POST', `/api/os/${ids.os2}/start`, {}, 'tec');
     expect(two.status).toBe(409);
     expect(two.body.message).toContain(`OS #${ids.os}`);
@@ -160,6 +163,8 @@ describe('execução pelo técnico', () => {
 
   it('finaliza exigindo relatório; depois de concluída só o gestor reabre', async () => {
     const base = `/api/os/${ids.os}`;
+    // Sem texto no envio, vale o rascunho salvo; sem rascunho, não conclui.
+    await call('PUT', `${base}/report`, { report: '' }, 'tec');
     expect((await call('POST', `${base}/finish`, { report: '' }, 'tec')).status).toBe(400);
     const f = await call('POST', `${base}/finish`, { report: 'Antena substituída e alinhada. Sinal -58 dBm no 3º andar.' }, 'tec');
     expect(f.status).toBe(200);
@@ -177,7 +182,7 @@ describe('execução pelo técnico', () => {
     const base = `/api/os/${ids.os2}`;
     expect((await call('POST', `${base}/start`, {}, 'tec')).status).toBe(200); // a primeira voltou pausada
     const cur = (await call('GET', base)).body;
-    const re = await call('PUT', base, { title: cur.title, client_id: ids.client, assigned_to: ids.tec2, priority: 'urgente' });
+    const re = await call('PUT', base, { title: cur.title, contacts: cur.contacts, client_id: ids.client, assigned_to: ids.tec2, priority: 'urgente' });
     expect(re.status, JSON.stringify(re.body)).toBe(200);
     expect(re.body).toMatchObject({ status: 'pausada', running_since: null, assigned_name: 'TEC2', priority: 'urgente' });
     expect((await call('GET', base, undefined, 'tec')).status).toBe(403);
@@ -227,7 +232,7 @@ describe('planejamento (ordens futuras, orçamentos e lembretes)', () => {
     expect((await call('GET', '/api/planner')).body.rows.map((r: any) => r.id)).not.toContain(ids.plan);
     expect((await call('GET', '/api/planner?view=encerrados')).body.rows.map((r: any) => r.id)).toContain(ids.plan);
 
-    const os = await call('POST', '/api/os', { title: 'Trocar nobreak do rack', priority: 'alta', assigned_to: ids.tec });
+    const os = await call('POST', '/api/os', { contacts: C, title: 'Trocar nobreak do rack', priority: 'alta', assigned_to: ids.tec });
     const link = await call('POST', `/api/planner/${ids.late}/link`, { service_order_id: os.body.id });
     expect(link.body).toMatchObject({ status: 'concluido', service_order_id: os.body.id, service_order_status: 'aberta' });
     expect((await call('POST', `/api/planner/${ids.late}/link`, { service_order_id: 99999 })).status).toBe(400);
@@ -238,5 +243,105 @@ describe('planejamento (ordens futuras, orçamentos e lembretes)', () => {
     expect((await call('GET', '/api/planner?view=todos')).body.rows.map((r: any) => r.id)).not.toContain(ids.plan);
     const log = await q.one("SELECT details FROM audit_log WHERE action = 'planner.delete' ORDER BY id DESC LIMIT 1");
     expect(log.details).toMatchObject({ kind: 'orcamento', notes: '4 câmeras + DVR' });
+  });
+});
+
+describe('contatos obrigatórios e dupla de técnicos', () => {
+  it('exige ao menos um contato com telefone válido e guarda só os dígitos', async () => {
+    const none = await call('POST', '/api/os', { title: 'Sem contato', assigned_to: ids.tec });
+    expect(none.status).toBe(400);
+    expect(none.body.message).toMatch(/ao menos um contato/);
+    expect((await call('POST', '/api/os', { title: 'Telefone ruim', contacts: [{ name: 'Fulano', phone: '1234' }] })).status).toBe(400);
+    const ok = await call('POST', '/api/os', { title: 'Dupla na portaria', contacts: [{ name: 'Portaria', phone: '+55 (49) 3555-1234' }, ...C], client_id: ids.client, assigned_to: ids.tec });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.contacts).toEqual([{ name: 'Portaria', phone: '554935551234' }, { name: 'Sr. João (síndico)', phone: '49999990000' }]);
+    ids.duo = ok.body.id;
+    expect((await call('POST', '/api/os', { title: 'Auxiliar sem responsável', contacts: C, helper_id: ids.tec2 })).status).toBe(400);
+  });
+
+  it('o técnico responsável chama o companheiro, que passa a ver e trabalhar na ordem', async () => {
+    const base = `/api/os/${ids.duo}`;
+    // A ordem #os (reaberta e pausada) não deve bloquear; garante que nenhuma outra do tec está rodando.
+    await q.query(`UPDATE service_orders SET status = 'pausada' WHERE status = 'em_andamento'`);
+    await q.query('UPDATE service_order_time SET ended_at = now() WHERE ended_at IS NULL');
+    const opts = await call('GET', `${base}/helper-options`, undefined, 'tec');
+    expect(opts.status).toBe(200);
+    expect(opts.body.map((u: any) => u.username)).not.toContain('tec');
+    expect((await call('POST', `${base}/helper`, { helper_id: ids.tec2 }, 'tec2')).status).toBe(403);
+    expect((await call('POST', `${base}/helper`, { helper_id: ids.tec }, 'tec')).status).toBe(400);
+    expect((await call('POST', `${base}/helper`, { helper_id: ids.esc }, 'tec')).status).toBe(400);
+    const h = await call('POST', `${base}/helper`, { helper_id: ids.tec2 }, 'tec');
+    expect(h.body).toMatchObject({ helper_id: ids.tec2, helper_name: 'TEC2', assigned_name: 'TEC' });
+    expect((await call('GET', '/api/os', undefined, 'tec2')).body.rows.map((r: any) => r.id)).toContain(ids.duo);
+    const d = await call('GET', base, undefined, 'tec2');
+    expect(d.body.can).toMatchObject({ execute: true, principal: false, work: true, setHelper: false, confirmed: false });
+    expect((await call('POST', `${base}/items`, { kind: 'material', description: 'Cabo', quantity: 3, unit: 'm' }, 'tec2')).status).toBe(200);
+    expect((await call('POST', `${base}/start`, {}, 'tec2')).status).toBe(200);
+    // O companheiro também conta como "em andamento" para o limite de uma ordem por vez.
+    const other = await call('POST', '/api/os', { title: 'Outra do tec2', contacts: C, assigned_to: ids.tec2 });
+    expect((await call('POST', `/api/os/${other.body.id}/start`, {}, 'tec2')).status).toBe(409);
+  });
+
+  it('com dois técnicos, a ordem só conclui quando os dois finalizam', async () => {
+    const base = `/api/os/${ids.duo}`;
+    expect((await call('POST', `${base}/finish`, { report: 'Feito pelo admin' })).status).toBe(403);
+    const first = await call('POST', `${base}/finish`, { report: 'Rack reorganizado e cabos identificados.' }, 'tec');
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
+    expect(first.body).toMatchObject({ status: 'pausada', running_since: null, finished_at: null });
+    expect(first.body.assigned_done_at).toBeTruthy();
+    expect(first.body.helper_done_at).toBeNull();
+    expect((await call('GET', base, undefined, 'tec')).body.can.confirmed).toBe(true);
+    // Se alguém volta a trabalhar, as confirmações recomeçam.
+    await call('POST', `${base}/start`, {}, 'tec2');
+    expect((await call('GET', base, undefined, 'tec')).body.assigned_done_at).toBeNull();
+    await call('POST', `${base}/finish`, {}, 'tec');
+    const last = await call('POST', `${base}/finish`, {}, 'tec2');
+    expect(last.body).toMatchObject({ status: 'concluida', report: 'Rack reorganizado e cabos identificados.' });
+    expect(last.body.finished_at).toBeTruthy();
+    const kinds = (await call('GET', base)).body.events.map((e: any) => e.kind);
+    expect(kinds.filter((k: string) => k === 'finalizacao_confirmada')).toHaveLength(3);
+    expect(kinds.at(-1)).toBe('concluida');
+  });
+});
+
+describe('perfil e exclusão automática de usuários', () => {
+  it('cada usuário edita o próprio perfil e envia a foto', async () => {
+    expect((await call('PUT', '/api/profile', { name: 'Técnico Um', phone: '123' }, 'tec')).status).toBe(400);
+    const p = await call('PUT', '/api/profile', { name: 'Técnico Um', email: 'tec@slot1.info', phone: '(49) 98888-7777' }, 'tec');
+    expect(p.body).toMatchObject({ name: 'Técnico Um', phone: '49988887777', email: 'tec@slot1.info' });
+    expect((await call('PUT', '/api/profile/avatar', { image: Buffer.from('nao e jpeg').toString('base64') }, 'tec')).status).toBe(400);
+    const av = await call('PUT', '/api/profile/avatar', { image: jpeg(5000) }, 'tec');
+    expect(av.body.avatar_updated_at).toBeTruthy();
+    const img = await call('GET', `/api/users/${ids.tec}/avatar`, undefined, 'tec2');
+    expect(img.status).toBe(200);
+    expect(img.headers['cache-control']).toBe('private, max-age=604800');
+    expect((await call('GET', `/api/users/${ids.tec2}/avatar`, undefined, 'tec')).status).toBe(404);
+    const me = await call('GET', '/api/auth/me', undefined, 'tec');
+    expect(me.body.user.avatarUpdatedAt).toBeTruthy();
+    const list = await call('GET', `/api/os/${ids.duo}`);
+    expect(list.body.assigned_avatar).toBeTruthy();
+  });
+
+  it('exclui quem está desativado há mais dias que o configurado', async () => {
+    const { purgeInactiveUsers } = await import('../src/services/user-cleanup.js');
+    expect((await call('GET', '/api/users/settings', undefined, 'tec')).status).toBe(403);
+    expect((await call('GET', '/api/users/settings')).body).toEqual({ auto_delete_days: 0 });
+    const u = await call('POST', '/api/users', { username: 'temporario', name: 'Temporário', role: 'tecnico', password: 'Senha12345x', must_change_password: false });
+    const put = (active: boolean) => call('PUT', `/api/users/${u.body.id}`, { name: 'Temporário', role: 'tecnico', active });
+    expect((await put(false)).body.deactivated_at).toBeTruthy();
+    expect((await put(true)).body.deactivated_at).toBeNull();
+    await put(false);
+    await q.query(`UPDATE users SET deactivated_at = now() - interval '31 days' WHERE id = $1`, [u.body.id]);
+    expect(await purgeInactiveUsers()).toEqual([]); // desligada (0 dias)
+    expect((await call('PUT', '/api/users/settings', { auto_delete_days: -1 })).status).toBe(400);
+    expect((await call('PUT', '/api/users/settings', { auto_delete_days: 45 })).body).toEqual({ auto_delete_days: 45 });
+    expect(await purgeInactiveUsers()).toEqual([]); // 31 dias < 45
+    await call('PUT', '/api/users/settings', { auto_delete_days: 30 });
+    expect(await purgeInactiveUsers()).toEqual(['temporario']);
+    expect(await q.one('SELECT 1 FROM users WHERE id = $1', [u.body.id])).toBeUndefined();
+    const log = await q.one(`SELECT target, details FROM audit_log WHERE action = 'user.auto_delete'`);
+    expect(log).toMatchObject({ target: 'temporario', details: { days: 30, name: 'Temporário' } });
+    // Usuário ativo nunca é excluído.
+    expect(await q.one(`SELECT 1 FROM users WHERE username = 'tec'`)).toBeTruthy();
   });
 });

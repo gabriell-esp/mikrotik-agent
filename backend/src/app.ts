@@ -12,6 +12,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { deviceRoutes } from './routes/devices.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { plannerRoutes } from './routes/planner.js';
+import { profileRoutes } from './routes/profile.js';
 import { pppoeRoutes } from './routes/pppoe.js';
 import { serviceOrderRoutes } from './routes/service-orders.js';
 import { unifiRoutes } from './routes/unifi.js';
@@ -42,7 +43,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
 
   app.addHook('onSend', async (_req, reply) => {
-    reply.header('Cache-Control', 'no-store');
+    if (!reply.getHeader('Cache-Control')) reply.header('Cache-Control', 'no-store');
     reply.header('X-Content-Type-Options', 'nosniff');
   });
 
@@ -73,6 +74,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(unifiRoutes);
   await app.register(serviceOrderRoutes);
   await app.register(plannerRoutes);
+  await app.register(profileRoutes);
 
   return app;
 }

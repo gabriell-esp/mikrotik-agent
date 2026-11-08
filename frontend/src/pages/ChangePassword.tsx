@@ -52,7 +52,7 @@ export default function ChangePasswordPage({ forced }: { forced?: boolean }) {
 
   if (forced) {
     return (
-      <div className="flex min-h-full items-center justify-center bg-slate-900 p-4">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-900 p-4">
         <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
           <h1 className="mb-4 font-semibold">Alteração de senha obrigatória</h1>
           {form}

@@ -13,6 +13,7 @@ import LoginPage from './pages/Login';
 import NotificationsPage from './pages/Notifications';
 import PppoePage from './pages/Pppoe';
 import PlannerPage from './pages/Planner';
+import ProfilePage from './pages/Profile';
 import PppoeDevicePage from './pages/PppoeDevice';
 import ServiceOrderPage from './pages/ServiceOrder';
 import ServiceOrdersPage from './pages/ServiceOrders';
@@ -53,6 +54,7 @@ export default function App() {
         {can('users.manage') && <Route path="usuarios" element={<UsersPage />} />}
         {can('notifications.manage') && <Route path="notificacoes" element={<NotificationsPage />} />}
         <Route path="senha" element={<ChangePasswordPage />} />
+        <Route path="perfil" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

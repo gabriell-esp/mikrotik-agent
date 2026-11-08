@@ -14,10 +14,11 @@
   --color-brand-900: #1e3a8a;
 }
 
+/* A rolagem é a da própria página (não de um painel interno): o navegador cuida de
+   barra de endereço no celular, voltar/avançar e rolagem por toque. */
 html,
-body,
-#root {
-  height: 100%;
+body {
+  min-height: 100%;
 }
 
 body {
@@ -29,7 +30,12 @@ body {
 
 /* Altura real da tela no celular (barra de endereço dinâmica) */
 #root {
-  height: 100dvh;
+  min-height: 100dvh;
+}
+
+/* Fundo travado enquanto um modal está aberto */
+html.modal-open {
+  overflow: hidden;
 }
 
 /* Áreas seguras (notch / barra de gestos) quando instalado como app */

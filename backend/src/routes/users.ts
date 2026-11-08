@@ -7,6 +7,8 @@ import { idParam, parse } from '../lib/validate.js';
 import { ALL_PERMISSIONS, effectivePermissions } from '../auth/permissions.js';
 import { requirePerm } from '../auth/session.js';
 import { audit } from '../services/audit.js';
+import { getSetting, setSetting } from '../services/settings.js';
+import { USER_SETTINGS, type UserSettings } from '../services/user-cleanup.js';
 import { passwordPolicy } from './auth.js';
 
 const permList = z.array(z.enum(ALL_PERMISSIONS as [string, ...string[]])).default([]);
@@ -45,10 +47,14 @@ function present(u: any) {
     locked: !!u.locked_until && new Date(u.locked_until) > new Date(),
     last_login_at: u.last_login_at,
     created_at: u.created_at,
+    deactivated_at: u.deactivated_at,
+    phone: u.phone,
+    avatar_updated_at: u.avatar_updated_at,
   };
 }
 
-const SELECT_USERS = `SELECT u.*, COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
+const SELECT_USERS = `SELECT u.id, u.username, u.name, u.email, u.role, u.permissions_grant, u.permissions_revoke, u.all_clients, u.active,
+       u.must_change_password, u.locked_until, u.last_login_at, u.created_at, u.deactivated_at, u.phone, u.avatar_updated_at, COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
   FROM users u LEFT JOIN user_clients uc ON uc.user_id = u.id`;
 
 async function activeAdmins(excludeId: number): Promise<number> {
@@ -62,6 +68,20 @@ export async function userRoutes(app: FastifyInstance) {
     return (await query(`${SELECT_USERS} GROUP BY u.id ORDER BY u.name`)).map(present);
   });
 
+  /** Configurações dos usuários: exclusão automática de quem está desativado há X dias (0 = desligada). */
+  app.get('/api/users/settings', async (req) => {
+    requirePerm(req, 'users.manage');
+    return getSetting<UserSettings>(USER_SETTINGS, { auto_delete_days: 0 });
+  });
+
+  app.put('/api/users/settings', async (req) => {
+    requirePerm(req, 'users.manage');
+    const b = parse(z.object({ auto_delete_days: z.number().int().min(0, 'Use 0 para desligar').max(3650, 'Máximo de 3650 dias') }), req.body);
+    await setSetting<UserSettings>(USER_SETTINGS, b);
+    await audit(req, { action: 'user.settings', details: b });
+    return b;
+  });
+
   app.post('/api/users', async (req) => {
     requirePerm(req, 'users.manage');
     const b = parse(createSchema, req.body);
@@ -69,8 +89,8 @@ export async function userRoutes(app: FastifyInstance) {
     const hash = await hashPassword(b.password);
     const id = await tx(async (db) => {
       const r = await db.query(
-        `INSERT INTO users(username, name, email, password_hash, role, permissions_grant, permissions_revoke, all_clients, active, must_change_password)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        `INSERT INTO users(username, name, email, password_hash, role, permissions_grant, permissions_revoke, all_clients, active, must_change_password, deactivated_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $9 THEN NULL ELSE now() END) RETURNING id`,
         [b.username, b.name, b.email || null, hash, b.role, b.permissions_grant, b.permissions_revoke, b.all_clients, b.active, b.must_change_password],
       );
       const id = r.rows[0].id;
@@ -92,7 +112,9 @@ export async function userRoutes(app: FastifyInstance) {
     if (id === me.id && (!b.active || b.role !== cur.role)) throw badRequest('Você não pode desativar ou alterar o próprio perfil.');
     await tx(async (db) => {
       await db.query(
-        `UPDATE users SET name=$2, email=$3, role=$4, permissions_grant=$5, permissions_revoke=$6, all_clients=$7, active=$8, updated_at=now() WHERE id=$1`,
+        `UPDATE users SET name=$2, email=$3, role=$4, permissions_grant=$5, permissions_revoke=$6, all_clients=$7, active=$8, updated_at=now(),
+                deactivated_at = CASE WHEN $8 THEN NULL ELSE COALESCE(deactivated_at, now()) END
+          WHERE id=$1`,
         [id, b.name, b.email || null, b.role, b.permissions_grant, b.permissions_revoke, b.all_clients, b.active],
       );
       await db.query('DELETE FROM user_clients WHERE user_id = $1', [id]);

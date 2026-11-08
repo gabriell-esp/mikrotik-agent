@@ -33,7 +33,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-full lg:grid-cols-2">
+    <div className="grid min-h-dvh lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-slate-950 p-12 lg:flex lg:flex-col lg:justify-between">
         <div className="pointer-events-none absolute -top-40 -right-40 size-[520px] rounded-full bg-brand-600/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-48 -left-24 size-[420px] rounded-full bg-brand-500/10 blur-3xl" />
@@ -58,7 +58,7 @@ export default function LoginPage() {
         <div className="relative text-xs text-slate-500">Acesso restrito à equipe Slot1. Todas as ações são registradas.</div>
       </div>
 
-      <div className="flex min-h-full flex-col bg-white lg:min-h-0 lg:items-center lg:justify-center lg:p-12">
+      <div className="flex min-h-dvh flex-col bg-white lg:min-h-0 lg:items-center lg:justify-center lg:p-12">
         {/* Topo com a marca (celular/tablet) */}
         <div className="relative overflow-hidden bg-slate-950 px-6 pt-[calc(3rem+env(safe-area-inset-top))] pb-16 lg:hidden">
           <div className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-brand-600/30 blur-3xl" />

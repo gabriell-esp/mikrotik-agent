@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, LockOpen, Pencil, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { KeyRound, LockOpen, Pencil, Plus, UserX } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import Avatar from '../components/Avatar';
 import DataList from '../components/DataList';
 import RowActions from '../components/RowActions';
 import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, useToast } from '../components/ui';
@@ -10,11 +11,60 @@ import { fmtDateTime } from '../lib/format';
 
 const ROLE_COLOR: Record<string, 'purple' | 'blue' | 'slate'> = { admin: 'purple', tecnico: 'blue', escritorio: 'slate' };
 
+/** Dias que faltam para a exclusão automática de um usuário desativado (null = não se aplica). */
+function daysLeft(u: any, days: number): number | null {
+  if (u.active || !days || !u.deactivated_at) return null;
+  const end = new Date(u.deactivated_at).getTime() + days * 86400e3;
+  return Math.max(0, Math.ceil((end - Date.now()) / 86400e3));
+}
+
+/** Configuração: excluir automaticamente quem está desativado há X dias. */
+function AutoDeleteCard() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const q = useQuery({ queryKey: ['users', 'settings'], queryFn: () => get('/users/settings') });
+  const [days, setDays] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (q.data) setDays(q.data.auto_delete_days ? String(q.data.auto_delete_days) : '');
+  }, [q.data]);
+  const n = days.trim() ? Number(days) : 0;
+  const valid = Number.isInteger(n) && n >= 0 && n <= 3650;
+  const changed = q.data && n !== q.data.auto_delete_days;
+  const save = async () => {
+    setBusy(true);
+    try {
+      await put('/users/settings', { auto_delete_days: n });
+      toast.ok(n ? `Usuários desativados há mais de ${n} dias serão excluídos automaticamente.` : 'Exclusão automática desligada.');
+      qc.invalidateQueries({ queryKey: ['users'] });
+    } catch (e) {
+      toast.err(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card title="Exclusão automática de usuários desativados" icon={UserX}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field label="Excluir após (dias desativado)" hint="Deixe vazio ou 0 para nunca excluir. A contagem começa quando o usuário é desativado." className="sm:w-80">
+          <Input inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} placeholder="Ex.: 30" />
+        </Field>
+        <Button variant="primary" onClick={save} loading={busy} disabled={!valid || !changed} className="sm:mb-6">Salvar</Button>
+      </div>
+      <p className="text-xs text-slate-500">
+        A exclusão é verificada a cada hora e fica registrada na auditoria. Ordens de serviço e histórico continuam com o nome de quem fez cada ação.
+      </p>
+    </Card>
+  );
+}
+
 export default function UsersPage() {
   const { catalog, roles, roleDefaults, user: me } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
   const users = useQuery({ queryKey: ['users'], queryFn: () => get('/users') });
+  const settings = useQuery({ queryKey: ['users', 'settings'], queryFn: () => get('/users/settings') });
+  const autoDays: number = settings.data?.auto_delete_days ?? 0;
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients') });
   const [editing, setEditing] = useState<any>(null);
   const [f, setF] = useState<any>({});
@@ -95,7 +145,12 @@ export default function UsersPage() {
               cols={[
                 {
                   key: 'name', header: 'Usuário', mobile: 'title',
-                  cell: (u: any) => <div><span className="font-medium text-slate-900">{u.name}</span><span className="block text-xs font-normal text-slate-500">{u.username}{u.email ? ` · ${u.email}` : ''}</span></div>,
+                  cell: (u: any) => (
+                    <div className="flex items-center gap-3">
+                      <Avatar id={u.id} name={u.name} version={u.avatar_updated_at} className="max-md:hidden" />
+                      <div className="min-w-0"><span className="font-medium text-slate-900">{u.name}</span><span className="block text-xs font-normal break-all text-slate-500">{u.username}{u.email ? ` · ${u.email}` : ''}</span></div>
+                    </div>
+                  ),
                 },
                 {
                   key: 'role', header: 'Perfil', mobile: 'badges',
@@ -111,6 +166,11 @@ export default function UsersPage() {
                   cell: (u: any) => (
                     <div className="flex flex-wrap gap-1">
                       {u.active ? <Badge color="green" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}
+                      {daysLeft(u, autoDays) != null && (
+                        <Badge color="red" title={`Desativado em ${fmtDateTime(u.deactivated_at)}`}>
+                          {daysLeft(u, autoDays) === 0 ? 'Exclusão na próxima verificação' : `Excluído em ${daysLeft(u, autoDays)} dia(s)`}
+                        </Badge>
+                      )}
                       {u.locked && <Badge color="red">Bloqueado</Badge>}
                       {u.must_change_password && <Badge color="amber">Trocar senha</Badge>}
                     </div>
@@ -136,6 +196,7 @@ export default function UsersPage() {
           </>
         )}
       </Card>
+      <AutoDeleteCard />
 
       <Modal
         open={!!editing}

@@ -1,29 +1,33 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import {
-  Ban, Camera, CheckCircle2, Package, Store, ChevronRight, ClipboardList, Clock, History, ImagePlus, MapPin, Pause, Pencil, Phone, Play, Receipt, RotateCcw, Trash2, User,
+  Ban, Camera, CheckCircle2, Package, Store, ChevronRight, ClipboardList, Clock, History, ImagePlus, MapPin, MessageCircle, Pause, Pencil, Phone, Play, Receipt, RotateCcw, Trash2,
+  UserPlus, Users,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import Avatar from '../components/Avatar';
 import RowActions from '../components/RowActions';
 import ServiceOrderForm from '../components/ServiceOrderForm';
-import { Badge, Button, Card, ConfirmDialog, Empty, ErrorBox, Field, IconButton, Input, Modal, Notice, PageHeader, PageSkeleton, Textarea, useToast } from '../components/ui';
+import { Badge, Button, Card, ConfirmDialog, Empty, ErrorBox, Field, IconButton, Input, Modal, Notice, PageHeader, PageSkeleton, Select, Textarea, useToast } from '../components/ui';
 import { del, get, post, put } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime } from '../lib/format';
-import { fmtClock, fmtMoney, OS_PRIORITY, osNumber, preparePhoto, useWorkSeconds } from '../lib/os';
+import { fmtClock, fmtMoney, fmtPhone, OS_PRIORITY, osNumber, preparePhoto, useWorkSeconds, whatsappUrl } from '../lib/os';
 import { OsStatusBadge } from './ServiceOrders';
 
 const EVENT: Record<string, string> = {
   criada: 'Ordem aberta', editada: 'Dados alterados', atribuida: 'Técnico alterado', iniciada: 'Serviço iniciado', retomada: 'Serviço retomado',
   pausada: 'Serviço pausado', concluida: 'Ordem concluída', reaberta: 'Ordem reaberta', cancelada: 'Ordem cancelada',
   gasto: 'Item lançado', gasto_removido: 'Item removido', foto: 'Foto enviada', foto_removida: 'Foto removida',
+  auxiliar: 'Companheiro alterado', finalizacao_confirmada: 'Finalização confirmada',
 };
 
 function eventDetail(e: any) {
   const d = e.details ?? {};
   if (e.kind === 'atribuida') return `${d.from ?? 'sem técnico'} → ${d.to ?? 'sem técnico'}`;
-  if (e.kind === 'criada' && d.assigned) return `para ${d.assigned}`;
+  if (e.kind === 'auxiliar') return `${d.from ?? 'nenhum'} → ${d.to ?? 'nenhum'}`;
+  if (e.kind === 'criada' && d.assigned) return `para ${d.assigned}${d.helper ? ` e ${d.helper}` : ''}`;
   if (e.kind === 'cancelada') return d.reason;
   if (e.kind === 'gasto' || e.kind === 'gasto_removido') {
     if (d.kind === 'compra') return `Compra: ${d.description} (${d.store}) · ${fmtMoney(d.amount)}`;
@@ -35,10 +39,22 @@ function eventDetail(e: any) {
 
 // ------------------------------------------------------------- cronômetro
 
+/** Quem ainda precisa confirmar a finalização (ordens com dois técnicos). */
+function pendingConfirm(o: any): { done: string[]; waiting: string[] } {
+  if (!o.helper_id) return { done: [], waiting: [] };
+  const done: string[] = [];
+  const waiting: string[] = [];
+  (o.assigned_done_at ? done : waiting).push(o.assigned_name ?? 'responsável');
+  (o.helper_done_at ? done : waiting).push(o.helper_name ?? 'companheiro');
+  return { done, waiting };
+}
+
 function Timer({ o, onAction, busy }: { o: any; onAction: (a: 'start' | 'pause' | 'finish') => void; busy: string | null }) {
   const sec = useWorkSeconds(o);
   const running = o.status === 'em_andamento';
   const closed = ['concluida', 'cancelada'].includes(o.status);
+  const duo = !!o.helper_id;
+  const { done, waiting } = pendingConfirm(o);
   return (
     <div className={clsx('rounded-2xl border p-4 shadow-xs sm:p-5', running ? 'border-brand-200 bg-gradient-to-br from-brand-50 to-white' : 'border-slate-200/80 bg-white')}>
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -63,13 +79,29 @@ function Timer({ o, onAction, busy }: { o: any; onAction: (a: 'start' | 'pause' 
               </Button>
             )}
             {o.status !== 'aberta' && (
-              <Button className="h-11 px-5" variant={running ? 'primary' : 'secondary'} onClick={() => onAction('finish')}><CheckCircle2 className="size-4" /> Finalizar</Button>
+              o.can.confirmed ? (
+                <Button className="h-11 px-5" disabled><CheckCircle2 className="size-4" /> Já finalizei</Button>
+              ) : (
+                <Button className="h-11 px-5" variant={running || done.length ? 'primary' : 'secondary'} onClick={() => onAction('finish')}>
+                  <CheckCircle2 className="size-4" /> {duo && done.length ? 'Confirmar finalização' : 'Finalizar'}
+                </Button>
+              )
             )}
           </div>
         )}
       </div>
+      {duo && !closed && done.length > 0 && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 ring-1 ring-amber-200">
+          <Users className="mt-0.5 size-4 shrink-0" />
+          <span><b>{done.join(' e ')}</b> já finalizou. Falta <b>{waiting.join(' e ')}</b> confirmar para a ordem ser concluída.</span>
+        </div>
+      )}
       {!o.can.execute && !closed && (
-        <p className="mt-3 text-xs text-slate-500">{o.assigned_name ? <>Somente <b>{o.assigned_name}</b> controla o cronômetro desta ordem.</> : 'Atribua um técnico para que a ordem possa ser iniciada.'}</p>
+        <p className="mt-3 text-xs text-slate-500">
+          {o.assigned_name
+            ? <>Somente {duo ? <><b>{o.assigned_name}</b> e <b>{o.helper_name}</b> controlam</> : <><b>{o.assigned_name}</b> controla</>} o cronômetro desta ordem.</>
+            : 'Atribua um técnico para que a ordem possa ser iniciada.'}
+        </p>
       )}
     </div>
   );
@@ -305,6 +337,110 @@ function Photos({ o, onChanged, me }: { o: any; onChanged: () => void; me: numbe
   );
 }
 
+// ------------------------------------------------------------- contatos
+
+function Contacts({ o }: { o: any }) {
+  const contacts: { name: string; phone: string }[] = o.contacts ?? [];
+  const msg = `Olá! Aqui é da Slot1 Informática, sobre a ${osNumber(o.id)} (${o.title}).`;
+  if (!contacts.length) {
+    return <Notice>Esta ordem não tem contato cadastrado. {o.can.manage ? 'Edite a ordem e informe ao menos um contato com WhatsApp.' : 'Peça ao escritório para incluir.'}</Notice>;
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {contacts.map((c, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-slate-900">{c.name}</div>
+            <a href={`tel:+${c.phone.length <= 11 ? `55${c.phone}` : c.phone}`} className="inline-flex items-center gap-1 text-xs text-slate-500 tabular-nums hover:text-brand-700">
+              <Phone className="size-3" />{fmtPhone(c.phone)}
+            </a>
+          </div>
+          <a
+            href={whatsappUrl(c.phone, msg)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-emerald-500 px-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 active:scale-95"
+          >
+            <MessageCircle className="size-4" /> WhatsApp
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CrewCard({ o, onHelper }: { o: any; onHelper: () => void }) {
+  const people = [
+    { id: o.assigned_to, name: o.assigned_name, version: o.assigned_avatar, role: 'Responsável', done: o.assigned_done_at },
+    { id: o.helper_id, name: o.helper_name, version: o.helper_avatar, role: 'Companheiro', done: o.helper_done_at },
+  ].filter((p) => p.id);
+  return (
+    <Card title="Equipe" icon={Users} actions={o.can.setHelper && (
+      <Button size="sm" onClick={onHelper}><UserPlus className="size-4" /> {o.helper_id ? 'Trocar' : 'Companheiro'}</Button>
+    )}>
+      {people.length ? (
+        <ul className="space-y-3">
+          {people.map((p) => (
+            <li key={p.id} className="flex items-center gap-3">
+              <Avatar id={p.id} name={p.name} version={p.version} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-slate-900">{p.name}</div>
+                <div className="text-xs text-slate-500">{p.role}</div>
+              </div>
+              {o.helper_id && p.done && !['concluida', 'cancelada'].includes(o.status) && <Badge color="green" dot>Finalizou</Badge>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-amber-700">Sem técnico atribuído.</p>
+      )}
+    </Card>
+  );
+}
+
+function HelperDialog({ o, open, onClose, onSaved }: { o: any; open: boolean; onClose: () => void; onSaved: () => void }) {
+  const toast = useToast();
+  const opts = useQuery({ queryKey: ['os', o.id, 'helper-options'], queryFn: () => get(`/os/${o.id}/helper-options`), enabled: open });
+  const [sel, setSel] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setSel(o.helper_id ? String(o.helper_id) : ''), [open, o.helper_id]);
+  const save = async (helper: number | null) => {
+    setBusy(true);
+    try {
+      await post(`/os/${o.id}/helper`, { helper_id: helper });
+      toast.ok(helper ? 'Companheiro adicionado: ele já pode lançar na ordem.' : 'Companheiro removido.');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.err(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Companheiro nesta ordem"
+      description="Quem está ajudando também poderá lançar materiais, fotos e o relatório. Para concluir, os dois precisam finalizar."
+      footer={
+        <>
+          {o.helper_id && <Button variant="ghost" className="sm:mr-auto" onClick={() => save(null)} disabled={busy}>Remover companheiro</Button>}
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" onClick={() => save(Number(sel))} loading={busy} disabled={!sel || Number(sel) === o.helper_id}>Salvar</Button>
+        </>
+      }
+    >
+      <Field label="Técnico">
+        <Select value={sel} onChange={(e) => setSel(e.target.value)}>
+          <option value="">Escolha…</option>
+          {(opts.data ?? []).map((u: any) => <option key={u.id} value={u.id}>{u.name}{u.open ? ` · ${u.open} em aberto` : ''}</option>)}
+        </Select>
+      </Field>
+    </Modal>
+  );
+}
+
 // ------------------------------------------------------------- página
 
 export default function ServiceOrderPage() {
@@ -320,6 +456,7 @@ export default function ServiceOrderPage() {
   const [cancelling, setCancelling] = useState(false);
   const [reason, setReason] = useState('');
   const [reopening, setReopening] = useState(false);
+  const [helperOpen, setHelperOpen] = useState(false);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['os'] });
   const run = async (key: string, fn: () => Promise<unknown>, ok?: string) => {
@@ -379,6 +516,8 @@ export default function ServiceOrderPage() {
 
       <Timer o={o} onAction={onTimer} busy={busy} />
 
+      <Contacts o={o} />
+
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           {o.description && (
@@ -392,13 +531,13 @@ export default function ServiceOrderPage() {
         </div>
 
         <div className="space-y-5">
+          <CrewCard o={o} onHelper={() => setHelperOpen(true)} />
+
           <Card title="Dados da ordem">
             <dl className="space-y-3 text-sm">
               {[
-                { icon: User, l: 'Técnico', v: o.assigned_name ?? <span className="text-amber-700">Sem técnico</span> },
                 { icon: ClipboardList, l: 'Cliente', v: o.client_name ?? '—' },
                 { icon: MapPin, l: 'Local', v: o.location },
-                { icon: Phone, l: 'Contato', v: o.contact },
                 { icon: Clock, l: 'Agendada para', v: o.scheduled_for && fmtDateTime(o.scheduled_for) },
                 { icon: Receipt, l: 'Compras em loja', v: o.total_cost ? fmtMoney(o.total_cost) : null },
               ].filter((r) => r.v).map((r) => (
@@ -430,7 +569,11 @@ export default function ServiceOrderPage() {
         open={finishing}
         onClose={() => setFinishing(false)}
         title={`Finalizar ${osNumber(o.id)}`}
-        description="O cronômetro para e a ordem fica como concluída."
+        description={
+          !o.helper_id ? 'O cronômetro para e a ordem fica como concluída.'
+            : pendingConfirm(o).done.length ? 'Sua confirmação conclui a ordem.'
+              : `O cronômetro para e a ordem aguarda ${o.assigned_to === user?.id ? o.helper_name : o.assigned_name} também finalizar.`
+        }
         footer={
           <>
             <Button onClick={() => setFinishing(false)}>Voltar</Button>
@@ -438,9 +581,17 @@ export default function ServiceOrderPage() {
               variant="primary"
               disabled={report.trim().length < 5}
               loading={busy === 'finish'}
-              onClick={async () => (await run('finish', () => post(`/os/${o.id}/finish`, { report }), 'Ordem de serviço concluída.')) && setFinishing(false)}
+              onClick={async () => {
+                let result: any;
+                const ok = await run('finish', async () => {
+                  result = await post(`/os/${o.id}/finish`, { report });
+                });
+                if (!ok) return;
+                toast.ok(result?.status === 'concluida' ? 'Ordem de serviço concluída.' : 'Sua finalização foi registrada. Falta o companheiro confirmar.');
+                setFinishing(false);
+              }}
             >
-              <CheckCircle2 className="size-4" /> Concluir ordem
+              <CheckCircle2 className="size-4" /> {o.helper_id && !pendingConfirm(o).done.length ? 'Finalizar minha parte' : 'Concluir ordem'}
             </Button>
           </>
         }
@@ -479,6 +630,7 @@ export default function ServiceOrderPage() {
         message="A ordem volta para o técnico responsável, que poderá retomar o cronômetro e lançar mais informações."
       />
       <ServiceOrderForm open={editing} onClose={() => setEditing(false)} initial={o} />
+      <HelperDialog o={o} open={helperOpen} onClose={() => setHelperOpen(false)} onSaved={refresh} />
     </div>
   );
 }

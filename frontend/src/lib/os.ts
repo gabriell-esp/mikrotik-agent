@@ -78,3 +78,18 @@ export async function preparePhoto(file: File) {
   const [image, thumb] = await Promise.all([draw(file, 1600, 0.82), draw(file, 400, 0.7)]);
   return { image, thumb };
 }
+
+/** Telefone só com dígitos → "(49) 99999-0000". Aceita com ou sem o 55. */
+export function fmtPhone(digits: string | null | undefined) {
+  const d = (digits ?? '').replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return digits ?? '';
+}
+
+/** Link que abre a conversa no WhatsApp (app no celular, web no computador). */
+export function whatsappUrl(digits: string, text?: string) {
+  const d = digits.replace(/\D/g, '');
+  const full = d.length <= 11 ? `55${d}` : d;
+  return `https://wa.me/${full}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}

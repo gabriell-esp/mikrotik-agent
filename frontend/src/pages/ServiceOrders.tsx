@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { CalendarClock, Camera, ClipboardList, Clock, MapPin, Plus, User } from 'lucide-react';
+import { CalendarClock, Camera, ClipboardList, Clock, MapPin, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Crew } from '../components/Avatar';
 import DataList from '../components/DataList';
 import ServiceOrderForm from '../components/ServiceOrderForm';
 import { Badge, Button, Card, Empty, ErrorBox, PageHeader, Pagination, SearchBox, Select, TableSkeleton, Tabs, usePaged } from '../components/ui';
@@ -128,8 +129,13 @@ export default function ServiceOrdersPage() {
                   ),
                 },
                 {
-                  key: 'assigned', header: 'Técnico', td: 'whitespace-nowrap',
-                  cell: (o: any) => o.assigned_name ? <span className="inline-flex items-center gap-1 text-sm"><User className="size-3.5 text-slate-400" />{o.assigned_name}</span> : <span className="text-xs text-amber-700">Sem técnico</span>,
+                  key: 'assigned', header: 'Técnicos', td: 'whitespace-nowrap',
+                  cell: (o: any) => o.assigned_name ? (
+                    <span className="inline-flex items-center gap-2 text-sm">
+                      <Crew people={[{ id: o.assigned_to, name: o.assigned_name, version: o.assigned_avatar }, { id: o.helper_id, name: o.helper_name, version: o.helper_avatar }]} />
+                      <span className="min-w-0 truncate">{o.assigned_name}{o.helper_name && <span className="text-slate-500"> + {o.helper_name.split(' ')[0]}</span>}</span>
+                    </span>
+                  ) : <span className="text-xs text-amber-700">Sem técnico</span>,
                 },
                 {
                   key: 'when', header: 'Agenda / conclusão', td: 'whitespace-nowrap',
