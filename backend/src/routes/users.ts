@@ -11,7 +11,8 @@ import { getSetting, setSetting } from '../services/settings.js';
 import { USER_SETTINGS, type UserSettings } from '../services/user-cleanup.js';
 import { passwordPolicy } from './auth.js';
 
-const permList = z.array(z.enum(ALL_PERMISSIONS as [string, ...string[]])).default([]);
+/** Ajustes individuais (legado: a tela usa grupos). Omitido na edição = mantém os atuais. */
+const permList = z.array(z.enum(ALL_PERMISSIONS as [string, ...string[]])).optional();
 
 const userBase = z.object({
   name: z.string().trim().min(2, 'Informe o nome').max(100),
@@ -101,7 +102,7 @@ export async function userRoutes(app: FastifyInstance) {
       const r = await db.query(
         `INSERT INTO users(username, name, email, password_hash, role, permissions_grant, permissions_revoke, all_clients, active, must_change_password, deactivated_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, CASE WHEN $9 THEN NULL ELSE now() END) RETURNING id`,
-        [b.username, b.name, b.email || null, hash, b.role, b.permissions_grant, b.permissions_revoke, b.all_clients, b.active, b.must_change_password],
+        [b.username, b.name, b.email || null, hash, b.role, b.role === 'admin' ? [] : b.permissions_grant ?? [], b.role === 'admin' ? [] : b.permissions_revoke ?? [], b.all_clients, b.active, b.must_change_password],
       );
       const id = r.rows[0].id;
       for (const c of b.client_ids) await db.query('INSERT INTO user_clients VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, c]);
@@ -123,10 +124,10 @@ export async function userRoutes(app: FastifyInstance) {
     if (id === me.id && (!b.active || b.role !== cur.role)) throw badRequest('Você não pode desativar ou alterar o próprio perfil.');
     await tx(async (db) => {
       await db.query(
-        `UPDATE users SET name=$2, email=$3, role=$4, permissions_grant=$5, permissions_revoke=$6, all_clients=$7, active=$8, updated_at=now(),
+        `UPDATE users SET name=$2, email=$3, role=$4, permissions_grant=COALESCE($5, permissions_grant), permissions_revoke=COALESCE($6, permissions_revoke), all_clients=$7, active=$8, updated_at=now(),
                 deactivated_at = CASE WHEN $8 THEN NULL ELSE COALESCE(deactivated_at, now()) END
           WHERE id=$1`,
-        [id, b.name, b.email || null, b.role, b.permissions_grant, b.permissions_revoke, b.all_clients, b.active],
+        [id, b.name, b.email || null, b.role, b.role === 'admin' ? [] : b.permissions_grant ?? null, b.role === 'admin' ? [] : b.permissions_revoke ?? null, b.all_clients, b.active],
       );
       await db.query('DELETE FROM user_clients WHERE user_id = $1', [id]);
       for (const c of b.client_ids) await db.query('INSERT INTO user_clients VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, c]);

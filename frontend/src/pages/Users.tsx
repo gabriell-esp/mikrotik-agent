@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import DataList from '../components/DataList';
-import PermissionChecklist from '../components/PermissionChecklist';
 import PermissionGroups from '../components/PermissionGroups';
 import RowActions from '../components/RowActions';
 import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, Tabs, useToast } from '../components/ui';
@@ -92,32 +91,16 @@ export default function UsersPage() {
   // Base de permissões: soma dos grupos escolhidos ou, sem grupo, o padrão do perfil.
   const chosenGroups = (groups.data ?? []).filter((g) => f.group_ids?.includes(g.id));
   const defaults: string[] = chosenGroups.length ? [...new Set(chosenGroups.flatMap((g) => g.permissions as string[]))] : (roleDefaults[f.role] ?? []);
-  const effective = (p: string) => f.role === 'admin' || (defaults.includes(p) ? !f.revoke?.includes(p) : f.grant?.includes(p));
-  const togglePerm = (p: string, on: boolean) => {
-    setF((x: any) => {
-      const grant = new Set<string>(x.grant);
-      const revoke = new Set<string>(x.revoke);
-      if (defaults.includes(p)) {
-        if (on) revoke.delete(p);
-        else revoke.add(p);
-        grant.delete(p);
-      } else {
-        if (on) grant.add(p);
-        else grant.delete(p);
-        revoke.delete(p);
-      }
-      return { ...x, grant: [...grant], revoke: [...revoke] };
-    });
-  };
+  const legacy = editing?.id && f.role !== 'admin' && !f.clear_adjust ? { grant: f.grant ?? [], revoke: f.revoke ?? [] } : { grant: [], revoke: [] };
+  const effectiveCount = f.role === 'admin' ? Object.keys(catalog).length
+    : new Set([...defaults.filter((p) => !legacy.revoke.includes(p)), ...legacy.grant]).size;
 
   const save = useMutation({
     mutationFn: () => {
-      const isAdmin = f.role === 'admin';
-      // Ajustes individuais só do que difere da base (trocar de grupo pode deixar sobras).
-      const body = { name: f.name, email: f.email, role: f.role, all_clients: f.all_clients, client_ids: f.client_ids, active: f.active,
-        group_ids: isAdmin ? [] : f.group_ids,
-        permissions_grant: isAdmin ? [] : f.grant.filter((p: string) => !defaults.includes(p)),
-        permissions_revoke: isAdmin ? [] : f.revoke.filter((p: string) => defaults.includes(p)) };
+      // Permissões vêm do perfil/grupos. Ajustes individuais antigos só são apagados quando pedido.
+      const body: any = { name: f.name, email: f.email, role: f.role, all_clients: f.all_clients, client_ids: f.client_ids, active: f.active,
+        group_ids: f.role === 'admin' ? [] : f.group_ids };
+      if (f.clear_adjust) Object.assign(body, { permissions_grant: [], permissions_revoke: [] });
       return editing.id ? put(`/users/${editing.id}`, body) : post('/users', { ...body, username: f.username, password: f.password, must_change_password: f.must_change_password });
     },
     onSuccess: () => {
@@ -183,7 +166,7 @@ export default function UsersPage() {
                     <div className="flex flex-wrap items-center gap-1 md:block">
                       <Badge color={ROLE_COLOR[u.role]}>{roles[u.role] ?? u.role}</Badge>
                       {u.role !== 'admin' && (u.group_ids ?? []).filter((id: number) => groupName.has(id)).map((id: number) => <span key={id} className="md:ml-1"><Badge color="blue">{groupName.get(id)}</Badge></span>)}
-                      {(u.permissions_grant.length > 0 || u.permissions_revoke.length > 0) && <span className="text-xs text-slate-500 md:block">permissões ajustadas</span>}
+                      {(u.permissions_grant.length > 0 || u.permissions_revoke.length > 0) && <span className="text-xs text-amber-700 md:block">ajustes individuais</span>}
                     </div>
                   ),
                 },
@@ -239,7 +222,7 @@ export default function UsersPage() {
             <Field label="Nome"><Input value={f.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
             <Field label="E-mail"><Input value={f.email ?? ''} onChange={(e) => set('email', e.target.value)} /></Field>
             <Field label="Perfil">
-              <Select value={f.role} onChange={(e) => setF((x: any) => ({ ...x, role: e.target.value, grant: [], revoke: [], group_ids: e.target.value === 'admin' ? [] : x.group_ids }))} disabled={editing?.id === me?.id}>
+              <Select value={f.role} onChange={(e) => setF((x: any) => ({ ...x, role: e.target.value, group_ids: e.target.value === 'admin' ? [] : x.group_ids }))} disabled={editing?.id === me?.id}>
                 {Object.entries(roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </Select>
             </Field>
@@ -291,20 +274,21 @@ export default function UsersPage() {
             </div>
           )}
 
-          <div>
-            <h4 className="mb-2 text-sm font-semibold text-slate-700">Permissões</h4>
-            {f.role === 'admin' ? <Notice kind="info">Administradores possuem todas as permissões.</Notice> : (
-              <>
-                <p className="mb-2 text-xs text-slate-500">Marque ou desmarque só as exceções deste usuário; o restante segue {chosenGroups.length ? 'os grupos' : 'o perfil'}.</p>
-                <PermissionChecklist
-                  catalog={catalog}
-                  checked={(p) => !!effective(p)}
-                  onToggle={togglePerm}
-                  badge={(p) => (!defaults.includes(p) && effective(p) ? <Badge color="blue">concedida</Badge> : defaults.includes(p) && !effective(p) ? <Badge color="red">removida</Badge> : null)}
-                />
-              </>
-            )}
-          </div>
+          {f.role === 'admin' ? <Notice kind="info">Administradores possuem todas as permissões.</Notice> : (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <span>Permissões: <b className="text-slate-900">{effectiveCount}</b> de {Object.keys(catalog).length}, {chosenGroups.length ? `pelo(s) grupo(s) ${chosenGroups.map((g) => g.name).join(', ')}` : `pelo padrão do perfil ${roles[f.role] ?? ''}`}.</span>
+              <button type="button" className="text-xs font-medium text-brand-700 hover:text-brand-800" onClick={() => { setEditing(null); setParams({ aba: 'grupos' }, { replace: true }); }}>Gerenciar grupos</button>
+            </div>
+          )}
+          {(legacy.grant.length > 0 || legacy.revoke.length > 0) && (
+            <Notice>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>Este usuário tem {legacy.grant.length + legacy.revoke.length} ajuste(s) individual(is) antigo(s) de permissão ({[...legacy.grant.map((p: string) => `+ ${catalog[p] ?? p}`), ...legacy.revoke.map((p: string) => `− ${catalog[p] ?? p}`)].join('; ')}).</span>
+                <Button size="sm" onClick={() => set('clear_adjust', true)}>Remover ajustes</Button>
+              </div>
+            </Notice>
+          )}
+          {f.clear_adjust && <p className="text-xs text-amber-700">Os ajustes individuais serão removidos ao salvar.</p>}
         </div>
       </Modal>
 

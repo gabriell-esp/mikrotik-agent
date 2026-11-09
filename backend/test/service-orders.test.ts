@@ -371,6 +371,11 @@ describe('grupos de permissões', () => {
     // Edição sem group_ids mantém o grupo.
     const list = (await call('GET', '/api/users')).body.find((x: any) => x.id === u);
     expect(list.group_ids).toEqual([ids.groupCampo]);
+    // Edição sem os ajustes mantém os atuais; enviar listas vazias remove.
+    await call('PUT', `/api/users/${u}`, { name: 'GRUPADO 2', role: 'escritorio' });
+    expect((await call('GET', '/api/auth/me', undefined, 'grupado')).body.user.permissions.sort()).toEqual(['logs.view', 'os.execute']);
+    await call('PUT', `/api/users/${u}`, { name: 'GRUPADO', role: 'escritorio', permissions_grant: [], permissions_revoke: [] });
+    expect((await call('GET', '/api/auth/me', undefined, 'grupado')).body.user.permissions.sort()).toEqual(['clients.view', 'os.execute']);
   });
 
   it('alterar o grupo muda todos os membros de uma vez; excluir volta ao padrão do perfil', async () => {
