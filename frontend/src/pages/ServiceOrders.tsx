@@ -131,9 +131,10 @@ export default function ServiceOrdersPage() {
                 {
                   key: 'assigned', header: 'Técnicos', td: 'whitespace-nowrap',
                   cell: (o: any) => o.assigned_name ? (
-                    <span className="inline-flex items-center gap-2 text-sm">
+                    <span className="flex min-w-0 items-center gap-2 text-sm md:inline-flex">
                       <Crew people={[{ id: o.assigned_to, name: o.assigned_name, version: o.assigned_avatar }, { id: o.helper_id, name: o.helper_name, version: o.helper_avatar }]} />
-                      <span className="min-w-0 truncate">{o.assigned_name}{o.helper_name && <span className="text-slate-500"> + {o.helper_name.split(' ')[0]}</span>}</span>
+                      {/* No celular o nome quebra linha dentro da coluna, sem invadir a agenda ao lado. */}
+                      <span className="min-w-0 break-words md:truncate">{o.assigned_name}{o.helper_name && <span className="text-slate-500"> + {o.helper_name.split(' ')[0]}</span>}</span>
                     </span>
                   ) : <span className="text-xs text-amber-700">Sem técnico</span>,
                 },
