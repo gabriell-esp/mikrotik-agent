@@ -90,6 +90,8 @@ async function run<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+const UNIFI_TARGET_MSG = 'Ao alterar o endereço, o usuário ou o certificado da controladora, informe a senha (ou API key) novamente.';
+
 export async function unifiRoutes(app: FastifyInstance) {
   app.get('/api/unifi/controllers', async (req) => {
     const user = requirePerm(req, 'unifi.view');
@@ -116,6 +118,10 @@ export async function unifiRoutes(app: FastifyInstance) {
     if (!password && b.controller_id) {
       const c = await getController(b.controller_id);
       if (!canAccess(user, c)) throw forbidden();
+      // A senha/API key salva nunca é enviada a outro endereço.
+      if (c.url !== b.url || c.auth_type !== b.auth_type || (b.auth_type === 'password' && c.username !== b.username) || (c.tls_fingerprint ?? null) !== (b.tls_fingerprint ?? null)) {
+        throw badRequest(UNIFI_TARGET_MSG);
+      }
       try {
         password = secretBox().decrypt(c.password_enc);
       } catch {
@@ -171,6 +177,10 @@ export async function unifiRoutes(app: FastifyInstance) {
     const b = parse(controllerSchema, req.body);
     if (b.client_id && !canAccessClient(user, b.client_id)) throw forbidden('Você não tem acesso a esse cliente.');
     if (await one('SELECT 1 FROM unifi_controllers WHERE lower(url) = lower($1) AND id <> $2', [b.url, ctrl.id])) throw conflict('Já existe uma controladora com esse endereço.');
+    if (!b.client_id && !user.allClients) throw badRequest('Selecione o cliente.');
+    if (!b.password && (b.url !== ctrl.url || (b.auth_type === 'password' && b.username !== ctrl.username) || (b.tls_fingerprint ?? null) !== (ctrl.tls_fingerprint ?? null))) {
+      throw badRequest(UNIFI_TARGET_MSG);
+    }
     if (b.auth_type !== ctrl.auth_type && !b.password) throw badRequest(b.auth_type === 'apikey' ? 'Informe a API key para trocar o modo de acesso.' : 'Informe a senha para trocar o modo de acesso.');
     const connChanged = b.url !== ctrl.url || b.auth_type !== ctrl.auth_type || b.username !== ctrl.username || !!b.password || b.tls_fingerprint !== ctrl.tls_fingerprint;
     await query(

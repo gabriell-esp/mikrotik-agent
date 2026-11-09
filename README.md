@@ -188,6 +188,15 @@ As permissões são verificadas no backend em cada endpoint, por **funcionalidad
 - Conexões com roteadores: TLS preferencial, pinning opcional de certificado, timeouts de conexão e de comando, e limite global e por equipamento de conexões simultâneas.
 - Nenhuma configuração do roteador é alterada automaticamente (descoberta, teste e cadastro são somente leitura).
 - Alterações PPPoE conferem o item no roteador pelo nome e pelo `.id` antes de agir, o que evita mexer em item trocado entre a consulta e a ação.
+- **Credencial salva não muda de destino:** ao alterar endereço, portas, método, usuário ou fingerprint de um equipamento (ou a URL/usuário de uma controladora UniFi, ou a URL do WPPConnect), é preciso informar a senha/chave de novo. O mesmo vale para o botão “Testar” com a senha salva. Isso impede desviar a senha cadastrada para outro servidor.
+- **Sem escalonamento de privilégio:** quem gerencia usuários sem ser administrador só cria, altera, redefine senha ou desbloqueia usuários com permissões e clientes que ele mesmo tem. Nunca mexe em administradores nem nas próprias permissões. Grupos de permissões são só para administradores.
+- **Escopo de clientes em tudo:** clientes, equipamentos, UniFi, ordens de serviço e planejamento respeitam a lista de clientes do usuário. A MikroTik central (cadastro, consulta e vínculo de peers WireGuard) é restrita a quem acessa todos os clientes. Os demais veem só os peers dos próprios equipamentos.
+- **IP real do cliente:** o Nginx do container só aceita `X-Forwarded-For` vindo de proxies em rede privada e repassa ao backend um único IP. Assim, um `X-Forwarded-For` forjado não burla o limite de tentativas de login nem falseia a auditoria.
+- Cabeçalhos de segurança na interface: CSP restritiva, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy` e `Cross-Origin-Opener-Policy`.
+- **Riscos aceitos (por natureza do sistema):**
+  - Quem tem `devices.manage`, `unifi.manage` ou `notifications.manage` informa endereços para o servidor conectar. Conceda essas permissões só a pessoas de confiança.
+  - O certificado dos roteadores é autoassinado; sem fingerprint cadastrado, o TLS cifra mas não autentica. O tráfego já passa dentro do túnel WireGuard.
+  - `audit.view` vê a auditoria de todos os clientes.
 
 ## Testes
 

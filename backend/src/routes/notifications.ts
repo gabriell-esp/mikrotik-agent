@@ -57,6 +57,10 @@ export async function notificationRoutes(app: FastifyInstance) {
     const b = parse(settingsSchema, req.body);
     const cur = await getWhatsappSettings();
     const secretChanged = !!b.secret_key;
+    // A chave salva não é enviada a outro servidor: trocar a URL exige informar a chave de novo.
+    if (!secretChanged && cur.secret_key_enc && b.base_url !== cur.base_url) {
+      throw badRequest('Ao alterar a URL do WPPConnect, informe a chave secreta novamente.');
+    }
     const connChanged = secretChanged || b.base_url !== cur.base_url || b.session !== cur.session;
     await saveWhatsappSettings({
       enabled: b.enabled,

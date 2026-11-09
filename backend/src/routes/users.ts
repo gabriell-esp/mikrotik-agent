@@ -2,10 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { one, query, tx } from '../db/pool.js';
 import { hashPassword } from '../lib/crypto.js';
-import { badRequest, conflict, notFound } from '../lib/errors.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { idParam, parse } from '../lib/validate.js';
 import { ALL_PERMISSIONS, effectivePermissions, userGroupColumns } from '../auth/permissions.js';
-import { requirePerm } from '../auth/session.js';
+import { requirePerm, type AuthUser } from '../auth/session.js';
 import { audit } from '../services/audit.js';
 import { getSetting, setSetting } from '../services/settings.js';
 import { USER_SETTINGS, type UserSettings } from '../services/user-cleanup.js';
@@ -68,6 +68,37 @@ async function setUserGroups(db: { query: (sql: string, p?: unknown[]) => Promis
   await db.query('INSERT INTO user_groups(user_id, group_id) SELECT $1, id FROM permission_groups WHERE id = ANY($2::int[]) ON CONFLICT DO NOTHING', [userId, groupIds]);
 }
 
+/**
+ * Anti-escalonamento: quem gerencia usuários sem ser administrador só mexe em quem tem no máximo
+ * as mesmas permissões e clientes que ele, e só concede o que ele mesmo tem. Nunca toca em administradores.
+ */
+interface UserShape { role: string; grant: string[]; revoke: string[]; groupIds: number[]; allClients: boolean; clientIds: number[] }
+
+async function groupPerms(ids: number[]): Promise<string[] | null> {
+  if (!ids.length) return null;
+  const r = await one(`SELECT COALESCE(array_agg(DISTINCT p) FILTER (WHERE p IS NOT NULL), '{}') AS perms
+                         FROM permission_groups g LEFT JOIN LATERAL unnest(g.permissions) p ON TRUE WHERE g.id = ANY($1::int[])`, [ids]);
+  const n = await one('SELECT count(*)::int AS n FROM permission_groups WHERE id = ANY($1::int[])', [ids]);
+  return n.n ? r.perms : null;
+}
+
+async function assertWithinActor(me: AuthUser, u: UserShape, what: string) {
+  if (me.role === 'admin') return;
+  if (u.role === 'admin') throw forbidden(`Somente administradores podem ${what} administradores.`);
+  const perms = effectivePermissions(u.role as any, u.grant, u.revoke, await groupPerms(u.groupIds));
+  const extra = [...perms].filter((p) => !me.permissions.has(p));
+  if (extra.length) throw forbidden(`Você não pode ${what} usuários com permissões que você não tem (${extra.join(', ')}).`);
+  if (!me.allClients && (u.allClients || u.clientIds.some((c) => !me.clientIds.includes(c)))) {
+    throw forbidden(`Você não pode ${what} usuários com acesso a clientes fora do seu escopo.`);
+  }
+}
+
+async function currentShape(id: number): Promise<UserShape & { username: string }> {
+  const u = await one(`${SELECT_USERS} WHERE u.id = $1 GROUP BY u.id`, [id]);
+  if (!u) throw notFound('Usuário não encontrado.');
+  return { username: u.username, role: u.role, grant: u.permissions_grant, revoke: u.permissions_revoke, groupIds: u.group_ids ?? [], allClients: u.all_clients, clientIds: u.client_ids ?? [] };
+}
+
 async function activeAdmins(excludeId: number): Promise<number> {
   const r = await one(`SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND active AND id <> $1`, [excludeId]);
   return r.n;
@@ -94,8 +125,9 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/users', async (req) => {
-    requirePerm(req, 'users.manage');
+    const me = requirePerm(req, 'users.manage');
     const b = parse(createSchema, req.body);
+    await assertWithinActor(me, { role: b.role, grant: b.permissions_grant ?? [], revoke: b.permissions_revoke ?? [], groupIds: b.group_ids ?? [], allClients: b.all_clients, clientIds: b.client_ids }, 'criar');
     if (await one('SELECT 1 FROM users WHERE username = $1', [b.username])) throw conflict('Já existe um usuário com esse login.');
     const hash = await hashPassword(b.password);
     const id = await tx(async (db) => {
@@ -119,6 +151,15 @@ export async function userRoutes(app: FastifyInstance) {
     const b = parse(userBase, req.body);
     const cur = await one('SELECT * FROM users WHERE id = $1', [id]);
     if (!cur) throw notFound('Usuário não encontrado.');
+    if (me.role !== 'admin') {
+      if (id === me.id) throw forbidden('Altere seus dados em “Meu perfil”. Permissões e clientes do próprio usuário só um administrador muda.');
+      const before = await currentShape(id);
+      await assertWithinActor(me, before, 'alterar');
+      await assertWithinActor(me, {
+        role: b.role, grant: b.permissions_grant ?? before.grant, revoke: b.permissions_revoke ?? before.revoke,
+        groupIds: b.group_ids ?? before.groupIds, allClients: b.all_clients, clientIds: b.client_ids,
+      }, 'definir');
+    }
     const losingAdmin = cur.role === 'admin' && cur.active && (b.role !== 'admin' || !b.active);
     if (losingAdmin && (await activeAdmins(id)) === 0) throw badRequest('É necessário manter ao menos um administrador ativo.');
     if (id === me.id && (!b.active || b.role !== cur.role)) throw badRequest('Você não pode desativar ou alterar o próprio perfil.');
@@ -139,9 +180,10 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/users/:id/reset-password', async (req) => {
-    requirePerm(req, 'users.manage');
+    const me = requirePerm(req, 'users.manage');
     const { id } = parse(idParam, req.params);
     const b = parse(z.object({ password: passwordPolicy }), req.body);
+    if (me.role !== 'admin') await assertWithinActor(me, await currentShape(id), 'redefinir a senha de');
     const cur = await one('SELECT username FROM users WHERE id = $1', [id]);
     if (!cur) throw notFound('Usuário não encontrado.');
     await query(
@@ -154,8 +196,9 @@ export async function userRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/users/:id/unlock', async (req) => {
-    requirePerm(req, 'users.manage');
+    const me = requirePerm(req, 'users.manage');
     const { id } = parse(idParam, req.params);
+    if (me.role !== 'admin') await assertWithinActor(me, await currentShape(id), 'desbloquear');
     const cur = await one('UPDATE users SET failed_logins=0, locked_until=NULL WHERE id=$1 RETURNING username', [id]);
     if (!cur) throw notFound('Usuário não encontrado.');
     await audit(req, { action: 'user.unlock', target: cur.username });

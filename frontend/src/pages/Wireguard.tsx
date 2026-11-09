@@ -86,8 +86,8 @@ export default function WireguardPage() {
     <div className="space-y-4">
       <PageHeader
         title="Peers WireGuard"
-        subtitle={<>Central: <b>{data.central.name}</b> ({data.central.host}) · RouterOS {data.central.ros_version ?? '?'}</>}
-        actions={<Button className="w-full sm:w-auto" onClick={() => sync.mutate()} loading={sync.isPending}><RefreshCw className="size-4" /> Ler da central agora</Button>}
+        subtitle={data.scoped ? <>Peers dos equipamentos dos seus clientes · Central: <b>{data.central.name}</b></> : <>Central: <b>{data.central.name}</b> ({data.central.host}) · RouterOS {data.central.ros_version ?? '?'}</>}
+        actions={!data.scoped && <Button className="w-full sm:w-auto" onClick={() => sync.mutate()} loading={sync.isPending}><RefreshCw className="size-4" /> Ler da central agora</Button>}
       />
       {data.sync && <Freshness collectedAt={data.sync.collectedAt} stale={data.sync.stale} error={data.sync.error} />}
       <Notice kind="info">
@@ -166,7 +166,7 @@ export default function WireguardPage() {
                   key: 'actions', header: '', mobile: 'actions', td: 'whitespace-nowrap text-right',
                   cell: (p: any) => (
                     <>
-                      {can('wireguard.link') && (
+                      {can('wireguard.link') && !data.scoped && (
                         <IconButton icon={Link2} label="Vincular a equipamento" onClick={() => { setLinking(p); setLinkDevice(p.device_id ? String(p.device_id) : ''); }} />
                       )}
                       {!p.device_id && can('devices.manage') && (

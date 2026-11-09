@@ -9,25 +9,30 @@ import { getCentral, peerState, suggestHost, syncCentralPeers, WG_CACHE_MODULE }
 
 export async function wireguardRoutes(app: FastifyInstance) {
   app.get('/api/wireguard/peers', async (req) => {
-    requirePerm(req, 'wireguard.view');
+    const user = requirePerm(req, 'wireguard.view');
     const central = await getCentral();
     if (!central) return { central: null, peers: [], sync: null };
+    // Quem não acessa todos os clientes vê só os peers ligados aos próprios equipamentos.
+    const scoped = !user.allClients;
     const peers = await query(
       `SELECT p.*, d.name AS device_name, d.status AS device_status, d.status_message AS device_status_message,
               d.last_ok_at AS device_last_ok_at, c.id AS client_id, c.name AS client_name
          FROM wg_peers p
          LEFT JOIN devices d ON d.id = p.device_id
          LEFT JOIN clients c ON c.id = d.client_id
-        WHERE p.central_device_id = $1
+        WHERE p.central_device_id = $1 ${scoped ? 'AND d.client_id = ANY($2::int[]) AND NOT d.is_central' : ''}
         ORDER BY p.present DESC, COALESCE(p.name, p.comment, p.allowed_address)`,
-      [central.id],
+      scoped ? [central.id, user.clientIds] : [central.id],
     );
     const sync = await one(
       'SELECT data, collected_at, last_error, last_error_at FROM module_cache WHERE device_id = $1 AND module = $2',
       [central.id, WG_CACHE_MODULE],
     );
     return {
-      central: { id: central.id, name: central.name, host: central.host, status: central.status, ros_version: central.ros_version },
+      central: scoped
+        ? { id: central.id, name: central.name, host: null, status: central.status, ros_version: null }
+        : { id: central.id, name: central.name, host: central.host, status: central.status, ros_version: central.ros_version },
+      scoped,
       sync: sync && {
         collectedAt: sync.collected_at,
         error: sync.last_error,
@@ -40,13 +45,15 @@ export async function wireguardRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/wireguard/sync', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async (req) => {
-    requirePerm(req, 'wireguard.view');
+    const user = requirePerm(req, 'wireguard.view');
+    if (!user.allClients) throw forbidden('A consulta à MikroTik central é restrita a quem acessa todos os clientes.');
     return syncCentralPeers();
   });
 
   /** Vincula (ou desvincula) um peer a um equipamento cadastrado. Não altera o roteador. */
   app.put('/api/wireguard/peers/:id/link', async (req) => {
     const user = requirePerm(req, 'wireguard.view', 'wireguard.link');
+    if (!user.allClients) throw forbidden('Vincular peers da central é restrito a quem acessa todos os clientes.');
     const { id } = parse(idParam, req.params);
     const b = parse(z.object({ device_id: z.number().int().positive().nullable() }), req.body);
     const peer = await one('SELECT * FROM wg_peers WHERE id = $1', [id]);

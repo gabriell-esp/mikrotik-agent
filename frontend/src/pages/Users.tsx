@@ -68,10 +68,12 @@ export default function UsersPage() {
   const settings = useQuery({ queryKey: ['users', 'settings'], queryFn: () => get('/users/settings') });
   const autoDays: number = settings.data?.auto_delete_days ?? 0;
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients') });
-  const groups = useQuery<any[]>({ queryKey: ['users', 'groups'], queryFn: () => get('/permission-groups') });
+  // Grupos de permissões: só administradores gerenciam (e escolhem) grupos.
+  const isAdmin = me?.role === 'admin';
+  const groups = useQuery<any[]>({ queryKey: ['users', 'groups'], queryFn: () => get('/permission-groups'), enabled: isAdmin });
   const groupName = new Map<number, string>((groups.data ?? []).map((g) => [g.id, g.name]));
   const [params, setParams] = useSearchParams();
-  const tab = params.get('aba') === 'grupos' ? 'grupos' : 'usuarios';
+  const tab = params.get('aba') === 'grupos' && me?.role === 'admin' ? 'grupos' : 'usuarios';
   const [editing, setEditing] = useState<any>(null);
   const [f, setF] = useState<any>({});
   const [error, setError] = useState<unknown>(null);
@@ -137,7 +139,7 @@ export default function UsersPage() {
       <Tabs
         tabs={[
           { key: 'usuarios', label: <>Usuários{users.data && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 tabular-nums">{users.data.length}</span>}</> },
-          { key: 'grupos', label: <>Grupos de permissões{groups.data && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 tabular-nums">{groups.data.length}</span>}</> },
+          ...(isAdmin ? [{ key: 'grupos', label: <>Grupos de permissões{groups.data && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 tabular-nums">{groups.data.length}</span>}</> }] : []),
         ]}
         active={tab}
         onChange={(k) => setParams(k === 'grupos' ? { aba: 'grupos' } : {}, { replace: true })}
@@ -253,7 +255,7 @@ export default function UsersPage() {
             )}
           </div>
 
-          {f.role !== 'admin' && (
+          {f.role !== 'admin' && isAdmin && (
             <div>
               <h4 className="mb-1 text-sm font-semibold text-slate-700">Grupos de permissões</h4>
               {!groups.data?.length ? (
@@ -277,7 +279,7 @@ export default function UsersPage() {
           {f.role === 'admin' ? <Notice kind="info">Administradores possuem todas as permissões.</Notice> : (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600">
               <span>Permissões: <b className="text-slate-900">{effectiveCount}</b> de {Object.keys(catalog).length}, {chosenGroups.length ? `pelo(s) grupo(s) ${chosenGroups.map((g) => g.name).join(', ')}` : `pelo padrão do perfil ${roles[f.role] ?? ''}`}.</span>
-              <button type="button" className="text-xs font-medium text-brand-700 hover:text-brand-800" onClick={() => { setEditing(null); setParams({ aba: 'grupos' }, { replace: true }); }}>Gerenciar grupos</button>
+              {isAdmin && <button type="button" className="text-xs font-medium text-brand-700 hover:text-brand-800" onClick={() => { setEditing(null); setParams({ aba: 'grupos' }, { replace: true }); }}>Gerenciar grupos</button>}
             </div>
           )}
           {(legacy.grant.length > 0 || legacy.revoke.length > 0) && (

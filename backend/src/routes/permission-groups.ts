@@ -1,9 +1,16 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ALL_PERMISSIONS } from '../auth/permissions.js';
 import { requirePerm } from '../auth/session.js';
+
+/** Grupos mudam permissões de vários usuários de uma vez: só administradores. */
+function requireAdmin(req: FastifyRequest) {
+  const u = requirePerm(req, 'users.manage');
+  if (u.role !== 'admin') throw forbidden('Somente administradores gerenciam grupos de permissões.');
+  return u;
+}
 import { one, query, tx } from '../db/pool.js';
-import { conflict, notFound } from '../lib/errors.js';
+import { conflict, forbidden, notFound } from '../lib/errors.js';
 import { idParam, parse } from '../lib/validate.js';
 import { audit } from '../services/audit.js';
 
@@ -35,12 +42,12 @@ const nameTaken = async (name: string, exceptId = 0) =>
 
 export async function permissionGroupRoutes(app: FastifyInstance) {
   app.get('/api/permission-groups', async (req) => {
-    requirePerm(req, 'users.manage');
+    requireAdmin(req);
     return (await query(`${SELECT_GROUPS} GROUP BY g.id ORDER BY lower(g.name)`)).map(present);
   });
 
   app.post('/api/permission-groups', async (req) => {
-    requirePerm(req, 'users.manage');
+    requireAdmin(req);
     const b = parse(groupSchema, req.body);
     if (await nameTaken(b.name)) throw conflict('Já existe um grupo com esse nome.');
     const id = await tx(async (db) => {
@@ -54,7 +61,7 @@ export async function permissionGroupRoutes(app: FastifyInstance) {
   });
 
   app.put('/api/permission-groups/:id', async (req) => {
-    requirePerm(req, 'users.manage');
+    requireAdmin(req);
     const { id } = parse(idParam, req.params);
     const b = parse(groupSchema, req.body);
     const cur = await one('SELECT name FROM permission_groups WHERE id = $1', [id]);
@@ -70,7 +77,7 @@ export async function permissionGroupRoutes(app: FastifyInstance) {
 
   /** Excluir o grupo: os membros voltam ao padrão do perfil (ou aos outros grupos que tiverem). */
   app.delete('/api/permission-groups/:id', async (req) => {
-    requirePerm(req, 'users.manage');
+    requireAdmin(req);
     const { id } = parse(idParam, req.params);
     const cur = await one('DELETE FROM permission_groups WHERE id = $1 RETURNING name', [id]);
     if (!cur) throw notFound('Grupo não encontrado.');

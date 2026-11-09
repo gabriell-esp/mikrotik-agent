@@ -79,7 +79,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { user: publicUser(u), permissionCatalog: PERMISSIONS, roles: ROLE_LABELS, roleDefaults: ROLE_DEFAULTS };
   });
 
-  app.post('/api/auth/change-password', async (req) => {
+  app.post('/api/auth/change-password', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
     const u = requireUser(req);
     const body = parse(z.object({ current: z.string().min(1), password: passwordPolicy }), req.body);
     const row = await one('SELECT password_hash FROM users WHERE id = $1', [u.id]);

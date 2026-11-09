@@ -24,7 +24,7 @@ const orderSchema = z.object({
   contacts: z.array(z.object({
     name: z.string().trim().min(2, 'Informe o nome do contato').max(100),
     phone: phoneSchema,
-  })).min(1, 'Informe ao menos um contato com telefone').max(5, 'Máximo de 5 contatos').default([]),
+  })).min(1, 'Informe ao menos um contato com telefone').max(5, 'Máximo de 5 contatos').prefault([]),
   priority: z.enum(PRIORITIES).default('normal'),
   assigned_to: z.number().int().positive().nullable().default(null),
   helper_id: z.number().int().positive().nullable().default(null),
@@ -47,7 +47,7 @@ const itemSchema = z.discriminatedUnion('kind', [
     description: z.string().trim().min(2, 'Informe o que foi comprado').max(300),
     amount: z.number().positive('Informe o valor pago').max(10_000_000),
   }),
-], { errorMap: () => ({ message: 'Escolha material ou compra.' }) });
+], { error: 'Escolha material ou compra.' });
 
 const reportSchema = z.object({ report: z.string().trim().max(10000).default('') });
 const photoSchema = z.object({

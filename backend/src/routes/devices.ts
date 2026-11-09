@@ -4,7 +4,7 @@ import { one, query, tx } from '../db/pool.js';
 import { badRequest, conflict, forbidden } from '../lib/errors.js';
 import { secretBox } from '../lib/secrets.js';
 import { hostSchema, optionalText, parse } from '../lib/validate.js';
-import { canAccessClient, deviceScopeSql, hasPerm, requirePerm } from '../auth/session.js';
+import { canAccessClient, deviceScopeSql, hasPerm, requirePerm, type AuthUser } from '../auth/session.js';
 import { getModule, MODULES } from '../modules/registry.js';
 import { openClient } from '../routeros/manager.js';
 import { RosError, type DeviceConnInfo } from '../routeros/types.js';
@@ -74,6 +74,25 @@ function present(r: any) {
   };
 }
 
+const TARGET_MSG = 'Ao alterar endereço, portas, método, usuário ou certificado, informe a senha do roteador novamente.';
+
+/** O destino da conexão mudou? (a senha salva só vale para o destino em que foi cadastrada) */
+function targetChanged(
+  d: { host: string; api_method: string; api_ssl_port: number; rest_port: number; api_port: number; allow_plaintext: boolean; tls_fingerprint: string | null; username: string },
+  b: { host: string; api_method: string; api_ssl_port: number; rest_port: number; api_port: number; allow_plaintext: boolean; tls_fingerprint: string | null; username: string },
+) {
+  const norm = (f: string | null) => (f ?? '').replace(/:/g, '').toLowerCase();
+  return d.host !== b.host || d.api_method !== b.api_method || d.api_ssl_port !== b.api_ssl_port || d.rest_port !== b.rest_port
+    || d.api_port !== b.api_port || (!d.allow_plaintext && b.allow_plaintext) || norm(d.tls_fingerprint) !== norm(b.tls_fingerprint)
+    || d.username !== b.username;
+}
+
+/** Vincular peer WireGuard da central: mesma regra da tela WireGuard. */
+async function assertPeerLink(user: AuthUser, peerId: number) {
+  if (!user.allClients || !hasPerm(user, 'wireguard.link')) throw forbidden('Você não pode vincular peers WireGuard.');
+  if (!(await one('SELECT 1 FROM wg_peers WHERE id = $1', [peerId]))) throw badRequest('Peer WireGuard não encontrado.');
+}
+
 export async function deviceRoutes(app: FastifyInstance) {
   app.get('/api/devices', async (req) => {
     const user = requirePerm(req, 'devices.view');
@@ -115,6 +134,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (!password && b.device_id) {
       const d = await getDeviceRow(b.device_id);
       if (!user.allClients && (d.is_central || !d.client_id || !canAccessClient(user, d.client_id))) throw forbidden();
+      // A senha salva nunca é enviada a outro destino (evita desviar a credencial para um servidor qualquer).
+      if (targetChanged(d, b)) throw badRequest(TARGET_MSG);
       password = secretBox().decrypt(d.password_enc);
       detected = d.detected_method;
     }
@@ -143,6 +164,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     const user = requirePerm(req, 'devices.manage');
     const b = parse(deviceSchema, req.body);
     if (!b.password) throw badRequest('Informe a senha do roteador.');
+    if (b.is_central && !user.allClients) throw forbidden('Somente quem acessa todos os clientes cadastra a MikroTik central.');
+    if (b.wg_peer_id) await assertPeerLink(user, b.wg_peer_id);
     if (b.client_id && !canAccessClient(user, b.client_id)) throw forbidden('Você não tem acesso a esse cliente.');
     if (b.is_central && (await one('SELECT 1 FROM devices WHERE is_central'))) throw conflict('Já existe uma MikroTik central cadastrada.');
     if (await one('SELECT 1 FROM devices WHERE host = $1 AND api_ssl_port = $2 AND rest_port = $3 AND api_port = $4', [b.host, b.api_ssl_port, b.rest_port, b.api_port])) {
@@ -171,6 +194,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { user, device } = await deviceFromRequest(req, 'devices.manage');
     const b = parse(deviceSchema, req.body);
     if (b.client_id && !canAccessClient(user, b.client_id)) throw forbidden('Você não tem acesso a esse cliente.');
+    if (b.is_central && !user.allClients) throw forbidden('Somente quem acessa todos os clientes cadastra a MikroTik central.');
+    if (!b.password && targetChanged(device, b)) throw badRequest(TARGET_MSG);
     if (b.is_central && (await one('SELECT 1 FROM devices WHERE is_central AND id <> $1', [device.id]))) throw conflict('Já existe uma MikroTik central cadastrada.');
     if (await one('SELECT 1 FROM devices WHERE host = $1 AND api_ssl_port = $2 AND rest_port = $3 AND api_port = $4 AND id <> $5', [b.host, b.api_ssl_port, b.rest_port, b.api_port, device.id])) {
       throw conflict('Já existe um equipamento com esse endereço e portas.');

@@ -44,7 +44,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     }
 
     let wireguard = null;
-    if (hasPerm(user, 'wireguard.view')) {
+    if (hasPerm(user, 'wireguard.view') && user.allClients) {
       const central = await getCentral();
       if (central) {
         const peers = await query('SELECT disabled, last_handshake_seconds, collected_at, device_id, present FROM wg_peers WHERE central_device_id = $1', [central.id]);

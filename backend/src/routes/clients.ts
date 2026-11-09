@@ -54,8 +54,9 @@ export async function clientRoutes(app: FastifyInstance) {
   });
 
   app.put('/api/clients/:id', async (req) => {
-    requirePerm(req, 'clients.manage');
+    const user = requirePerm(req, 'clients.manage');
     const { id } = parse(idParam, req.params);
+    if (!canAccessClient(user, id)) throw forbidden();
     const b = parse(clientSchema, req.body);
     if (await one('SELECT 1 FROM clients WHERE lower(name) = lower($1) AND id <> $2', [b.name, id])) throw conflict('Já existe um cliente com esse nome.');
     const c = await one(
@@ -68,8 +69,9 @@ export async function clientRoutes(app: FastifyInstance) {
   });
 
   app.delete('/api/clients/:id', async (req) => {
-    requirePerm(req, 'clients.manage');
+    const user = requirePerm(req, 'clients.manage');
     const { id } = parse(idParam, req.params);
+    if (!canAccessClient(user, id)) throw forbidden();
     const n = await one('SELECT count(*)::int AS n FROM devices WHERE client_id = $1', [id]);
     if (n.n > 0) throw badRequest('Cliente possui equipamentos cadastrados. Remova ou transfira os equipamentos antes.');
     const c = await one('DELETE FROM clients WHERE id = $1 RETURNING name', [id]);
