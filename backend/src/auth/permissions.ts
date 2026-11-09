@@ -53,10 +53,22 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
   escritorio: ['dashboard.view', 'clients.view', 'devices.view', 'pppoe.view', 'os.view_all', 'os.manage'],
 };
 
-export function effectivePermissions(role: Role, grant: string[], revoke: string[]): Set<Permission> {
+/**
+ * Permissões efetivas. Administrador: todas. Demais: base = soma dos grupos do usuário (se tiver algum)
+ * ou o padrão do perfil; depois os ajustes individuais (concedidas entram, removidas saem).
+ * groupPerms null = usuário sem grupo.
+ */
+export function effectivePermissions(role: Role, grant: string[], revoke: string[], groupPerms: string[] | null = null): Set<Permission> {
   if (role === 'admin') return new Set(ALL_PERMISSIONS); // administrador sempre completo
-  const set = new Set<Permission>(ROLE_DEFAULTS[role]);
+  const set = new Set<Permission>(groupPerms ? groupPerms.filter((p): p is Permission => p in PERMISSIONS) : ROLE_DEFAULTS[role]);
   for (const p of grant) if (p in PERMISSIONS) set.add(p as Permission);
   for (const p of revoke) set.delete(p as Permission);
   return set;
 }
+
+/** Colunas SQL com os grupos de um usuário (alias da tabela users). group_permissions é NULL sem grupo. */
+export const userGroupColumns = (u: string) => `
+  (SELECT COALESCE(array_agg(ug.group_id ORDER BY ug.group_id), '{}') FROM user_groups ug WHERE ug.user_id = ${u}.id) AS group_ids,
+  (SELECT CASE WHEN count(*) = 0 THEN NULL ELSE COALESCE(array_agg(DISTINCT gp.p) FILTER (WHERE gp.p IS NOT NULL), '{}') END
+     FROM user_groups ug JOIN permission_groups g ON g.id = ug.group_id LEFT JOIN LATERAL unnest(g.permissions) AS gp(p) ON TRUE
+    WHERE ug.user_id = ${u}.id) AS group_permissions`;

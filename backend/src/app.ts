@@ -12,6 +12,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { deviceRoutes } from './routes/devices.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { plannerRoutes } from './routes/planner.js';
+import { permissionGroupRoutes } from './routes/permission-groups.js';
 import { profileRoutes } from './routes/profile.js';
 import { pppoeRoutes } from './routes/pppoe.js';
 import { serviceOrderRoutes } from './routes/service-orders.js';
@@ -75,6 +76,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(serviceOrderRoutes);
   await app.register(plannerRoutes);
   await app.register(profileRoutes);
+  await app.register(permissionGroupRoutes);
 
   return app;
 }

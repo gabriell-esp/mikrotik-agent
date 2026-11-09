@@ -4,7 +4,7 @@ import { one, query, tx } from '../db/pool.js';
 import { hashPassword } from '../lib/crypto.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { idParam, parse } from '../lib/validate.js';
-import { ALL_PERMISSIONS, effectivePermissions } from '../auth/permissions.js';
+import { ALL_PERMISSIONS, effectivePermissions, userGroupColumns } from '../auth/permissions.js';
 import { requirePerm } from '../auth/session.js';
 import { audit } from '../services/audit.js';
 import { getSetting, setSetting } from '../services/settings.js';
@@ -21,6 +21,8 @@ const userBase = z.object({
   permissions_revoke: permList,
   all_clients: z.boolean().default(false),
   client_ids: z.array(z.number().int().positive()).default([]),
+  /** Grupos de permissões. Omitido na edição = mantém os atuais. */
+  group_ids: z.array(z.number().int().positive()).max(50).optional(),
   active: z.boolean().default(true),
 });
 
@@ -39,9 +41,10 @@ function present(u: any) {
     role: u.role,
     permissions_grant: u.permissions_grant,
     permissions_revoke: u.permissions_revoke,
-    effective_permissions: [...effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke)],
+    effective_permissions: [...effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke, u.group_permissions)],
     all_clients: u.all_clients,
     client_ids: u.client_ids ?? [],
+    group_ids: u.group_ids ?? [],
     active: u.active,
     must_change_password: u.must_change_password,
     locked: !!u.locked_until && new Date(u.locked_until) > new Date(),
@@ -54,8 +57,15 @@ function present(u: any) {
 }
 
 const SELECT_USERS = `SELECT u.id, u.username, u.name, u.email, u.role, u.permissions_grant, u.permissions_revoke, u.all_clients, u.active,
-       u.must_change_password, u.locked_until, u.last_login_at, u.created_at, u.deactivated_at, u.phone, u.avatar_updated_at, COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
+       u.must_change_password, u.locked_until, u.last_login_at, u.created_at, u.deactivated_at, u.phone, u.avatar_updated_at,${userGroupColumns('u')}, COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
   FROM users u LEFT JOIN user_clients uc ON uc.user_id = u.id`;
+
+/** Grava os grupos do usuário (ignora grupos inexistentes). Administrador não usa grupos. */
+async function setUserGroups(db: { query: (sql: string, p?: unknown[]) => Promise<unknown> }, userId: number, role: string, groupIds: number[]) {
+  await db.query('DELETE FROM user_groups WHERE user_id = $1', [userId]);
+  if (role === 'admin' || !groupIds.length) return;
+  await db.query('INSERT INTO user_groups(user_id, group_id) SELECT $1, id FROM permission_groups WHERE id = ANY($2::int[]) ON CONFLICT DO NOTHING', [userId, groupIds]);
+}
 
 async function activeAdmins(excludeId: number): Promise<number> {
   const r = await one(`SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND active AND id <> $1`, [excludeId]);
@@ -95,9 +105,10 @@ export async function userRoutes(app: FastifyInstance) {
       );
       const id = r.rows[0].id;
       for (const c of b.client_ids) await db.query('INSERT INTO user_clients VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, c]);
+      await setUserGroups(db, id, b.role, b.group_ids ?? []);
       return id;
     });
-    await audit(req, { action: 'user.create', target: b.username, details: { role: b.role, all_clients: b.all_clients, client_ids: b.client_ids, grant: b.permissions_grant, revoke: b.permissions_revoke } });
+    await audit(req, { action: 'user.create', target: b.username, details: { role: b.role, all_clients: b.all_clients, client_ids: b.client_ids, groups: b.group_ids, grant: b.permissions_grant, revoke: b.permissions_revoke } });
     return present(await one(`${SELECT_USERS} WHERE u.id = $1 GROUP BY u.id`, [id]));
   });
 
@@ -119,9 +130,10 @@ export async function userRoutes(app: FastifyInstance) {
       );
       await db.query('DELETE FROM user_clients WHERE user_id = $1', [id]);
       for (const c of b.client_ids) await db.query('INSERT INTO user_clients VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, c]);
+      if (b.group_ids || b.role === 'admin') await setUserGroups(db, id, b.role, b.group_ids ?? []);
       if (!b.active) await db.query('DELETE FROM sessions WHERE user_id = $1', [id]);
     });
-    await audit(req, { action: 'user.update', target: cur.username, details: { role: b.role, active: b.active, all_clients: b.all_clients, client_ids: b.client_ids, grant: b.permissions_grant, revoke: b.permissions_revoke } });
+    await audit(req, { action: 'user.update', target: cur.username, details: { role: b.role, active: b.active, all_clients: b.all_clients, client_ids: b.client_ids, groups: b.group_ids, grant: b.permissions_grant, revoke: b.permissions_revoke } });
     return present(await one(`${SELECT_USERS} WHERE u.id = $1 GROUP BY u.id`, [id]));
   });
 

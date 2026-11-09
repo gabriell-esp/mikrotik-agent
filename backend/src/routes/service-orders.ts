@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type pg from 'pg';
 import { z } from 'zod';
-import { effectivePermissions } from '../auth/permissions.js';
+import { effectivePermissions, userGroupColumns } from '../auth/permissions.js';
 import { canAccessClient, hasPerm, requirePerm, requireUser, type AuthUser } from '../auth/session.js';
 import { one, query, tx } from '../db/pool.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -132,8 +132,8 @@ const label = (o: { id: number; title: string }) => `OS #${o.id} · ${o.title}`;
 
 async function validateAssignee(userId: number | null, what = 'O responsável escolhido') {
   if (userId == null) return null;
-  const u = await one('SELECT id, name, role, permissions_grant, permissions_revoke FROM users WHERE id = $1 AND active', [userId]);
-  if (!u || !effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke).has('os.execute')) {
+  const u = await one(`SELECT u.id, u.name, u.role, u.permissions_grant, u.permissions_revoke,${userGroupColumns('u')} FROM users u WHERE u.id = $1 AND u.active`, [userId]);
+  if (!u || !effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke, u.group_permissions).has('os.execute')) {
     throw badRequest(`${what} não pode executar ordens de serviço.`);
   }
   return u as { id: number; name: string };
@@ -199,14 +199,14 @@ export async function serviceOrderRoutes(app: FastifyInstance) {
 
   /** Usuários que podem receber ordens (ativos e com permissão de executar). */
   async function executors() {
-    const users = await query('SELECT id, name, username, role, permissions_grant, permissions_revoke, avatar_updated_at FROM users WHERE active ORDER BY name');
+    const users = await query(`SELECT u.id, u.name, u.username, u.role, u.permissions_grant, u.permissions_revoke, u.avatar_updated_at,${userGroupColumns('u')} FROM users u WHERE u.active ORDER BY u.name`);
     const open = await query(
       `SELECT u AS user_id, count(*)::int AS n FROM service_orders, unnest(ARRAY[assigned_to, helper_id]) AS u
         WHERE status = ANY('{aberta,em_andamento,pausada}') AND u IS NOT NULL GROUP BY u`,
     );
     const load = new Map(open.map((r) => [r.user_id, r.n]));
     return users
-      .filter((u) => effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke).has('os.execute'))
+      .filter((u) => effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke, u.group_permissions).has('os.execute'))
       .map((u) => ({ id: u.id, name: u.name, username: u.username, avatar_updated_at: u.avatar_updated_at, open: load.get(u.id) ?? 0 }));
   }
 

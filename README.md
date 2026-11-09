@@ -173,7 +173,8 @@ As permissões são verificadas no backend em cada endpoint, por **funcionalidad
 | Ordens de serviço: abrir, atribuir, editar, reabrir e cancelar | ✔ | concessão individual | ✔ |
 | Planejamento: ordens futuras, orçamentos e lembretes | ✔ | concessão individual | concessão individual |
 
-- Toda permissão pode ser concedida ou removida por usuário (exceto do administrador, que é sempre completo).
+- **Grupos de permissões** (Usuários → aba “Grupos de permissões”): um conjunto nomeado de permissões com seus membros. Quem está em um ou mais grupos usa a soma das permissões dos grupos **no lugar** do padrão do perfil; alterar o grupo muda todos os membros na hora. Excluir o grupo devolve os membros ao padrão do perfil. Administradores não entram em grupos.
+- Por cima da base (grupos ou perfil), toda permissão ainda pode ser concedida ou removida por usuário, como exceção (exceto do administrador, que é sempre completo).
 - **Escopo:** “todos os clientes” ou uma lista de clientes. A MikroTik central só é visível para quem tem acesso a todos os clientes.
 - O sistema impede remover ou desativar o último administrador ativo.
 

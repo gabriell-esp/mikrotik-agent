@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, LockOpen, Pencil, Plus, UserX } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Avatar from '../components/Avatar';
 import DataList from '../components/DataList';
+import PermissionChecklist from '../components/PermissionChecklist';
+import PermissionGroups from '../components/PermissionGroups';
 import RowActions from '../components/RowActions';
-import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, useToast } from '../components/ui';
+import { Badge, Button, Card, Checkbox, Empty, ErrorBox, Field, Input, Modal, Notice, PageHeader, Select, TableSkeleton, Tabs, useToast } from '../components/ui';
 import { get, post, put } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { fmtDateTime } from '../lib/format';
@@ -66,6 +69,10 @@ export default function UsersPage() {
   const settings = useQuery({ queryKey: ['users', 'settings'], queryFn: () => get('/users/settings') });
   const autoDays: number = settings.data?.auto_delete_days ?? 0;
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients') });
+  const groups = useQuery<any[]>({ queryKey: ['users', 'groups'], queryFn: () => get('/permission-groups') });
+  const groupName = new Map<number, string>((groups.data ?? []).map((g) => [g.id, g.name]));
+  const [params, setParams] = useSearchParams();
+  const tab = params.get('aba') === 'grupos' ? 'grupos' : 'usuarios';
   const [editing, setEditing] = useState<any>(null);
   const [f, setF] = useState<any>({});
   const [error, setError] = useState<unknown>(null);
@@ -77,12 +84,14 @@ export default function UsersPage() {
     setEditing(u ?? {});
     setF(
       u
-        ? { name: u.name, email: u.email ?? '', role: u.role, all_clients: u.all_clients, client_ids: u.client_ids, active: u.active, grant: u.permissions_grant, revoke: u.permissions_revoke }
-        : { username: '', name: '', email: '', role: 'escritorio', all_clients: false, client_ids: [], active: true, grant: [], revoke: [], password: '', must_change_password: true },
+        ? { name: u.name, email: u.email ?? '', role: u.role, all_clients: u.all_clients, client_ids: u.client_ids, active: u.active, grant: u.permissions_grant, revoke: u.permissions_revoke, group_ids: u.group_ids ?? [] }
+        : { username: '', name: '', email: '', role: 'escritorio', all_clients: false, client_ids: [], active: true, grant: [], revoke: [], group_ids: [], password: '', must_change_password: true },
     );
   };
 
-  const defaults: string[] = roleDefaults[f.role] ?? [];
+  // Base de permissões: soma dos grupos escolhidos ou, sem grupo, o padrão do perfil.
+  const chosenGroups = (groups.data ?? []).filter((g) => f.group_ids?.includes(g.id));
+  const defaults: string[] = chosenGroups.length ? [...new Set(chosenGroups.flatMap((g) => g.permissions as string[]))] : (roleDefaults[f.role] ?? []);
   const effective = (p: string) => f.role === 'admin' || (defaults.includes(p) ? !f.revoke?.includes(p) : f.grant?.includes(p));
   const togglePerm = (p: string, on: boolean) => {
     setF((x: any) => {
@@ -103,8 +112,12 @@ export default function UsersPage() {
 
   const save = useMutation({
     mutationFn: () => {
+      const isAdmin = f.role === 'admin';
+      // Ajustes individuais só do que difere da base (trocar de grupo pode deixar sobras).
       const body = { name: f.name, email: f.email, role: f.role, all_clients: f.all_clients, client_ids: f.client_ids, active: f.active,
-        permissions_grant: f.role === 'admin' ? [] : f.grant, permissions_revoke: f.role === 'admin' ? [] : f.revoke };
+        group_ids: isAdmin ? [] : f.group_ids,
+        permissions_grant: isAdmin ? [] : f.grant.filter((p: string) => !defaults.includes(p)),
+        permissions_revoke: isAdmin ? [] : f.revoke.filter((p: string) => defaults.includes(p)) };
       return editing.id ? put(`/users/${editing.id}`, body) : post('/users', { ...body, username: f.username, password: f.password, must_change_password: f.must_change_password });
     },
     onSuccess: () => {
@@ -134,7 +147,19 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Usuários do sistema" actions={<Button variant="primary" className="w-full sm:w-auto" onClick={() => open()}><Plus className="size-4" /> Novo usuário</Button>} />
+      <PageHeader
+        title="Usuários do sistema"
+        actions={tab === 'usuarios' && <Button variant="primary" className="w-full sm:w-auto" onClick={() => open()}><Plus className="size-4" /> Novo usuário</Button>}
+      />
+      <Tabs
+        tabs={[
+          { key: 'usuarios', label: <>Usuários{users.data && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 tabular-nums">{users.data.length}</span>}</> },
+          { key: 'grupos', label: <>Grupos de permissões{groups.data && <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600 tabular-nums">{groups.data.length}</span>}</> },
+        ]}
+        active={tab}
+        onChange={(k) => setParams(k === 'grupos' ? { aba: 'grupos' } : {}, { replace: true })}
+      />
+      {tab === 'grupos' ? <PermissionGroups users={users.data ?? []} /> : (<>
       <Card bodyClass="">
         {users.isLoading ? <TableSkeleton cols={5} /> : users.error ? <div className="p-4"><ErrorBox error={users.error} /></div> : !users.data.length ? <Empty>Nenhum usuário.</Empty> : (
           <>
@@ -157,6 +182,7 @@ export default function UsersPage() {
                   cell: (u: any) => (
                     <div className="flex flex-wrap items-center gap-1 md:block">
                       <Badge color={ROLE_COLOR[u.role]}>{roles[u.role] ?? u.role}</Badge>
+                      {u.role !== 'admin' && (u.group_ids ?? []).filter((id: number) => groupName.has(id)).map((id: number) => <span key={id} className="md:ml-1"><Badge color="blue">{groupName.get(id)}</Badge></span>)}
                       {(u.permissions_grant.length > 0 || u.permissions_revoke.length > 0) && <span className="text-xs text-slate-500 md:block">permissões ajustadas</span>}
                     </div>
                   ),
@@ -197,6 +223,7 @@ export default function UsersPage() {
         )}
       </Card>
       <AutoDeleteCard />
+      </>)}
 
       <Modal
         open={!!editing}
@@ -212,7 +239,7 @@ export default function UsersPage() {
             <Field label="Nome"><Input value={f.name ?? ''} onChange={(e) => set('name', e.target.value)} /></Field>
             <Field label="E-mail"><Input value={f.email ?? ''} onChange={(e) => set('email', e.target.value)} /></Field>
             <Field label="Perfil">
-              <Select value={f.role} onChange={(e) => setF((x: any) => ({ ...x, role: e.target.value, grant: [], revoke: [] }))} disabled={editing?.id === me?.id}>
+              <Select value={f.role} onChange={(e) => setF((x: any) => ({ ...x, role: e.target.value, grant: [], revoke: [], group_ids: e.target.value === 'admin' ? [] : x.group_ids }))} disabled={editing?.id === me?.id}>
                 {Object.entries(roles).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </Select>
             </Field>
@@ -243,15 +270,39 @@ export default function UsersPage() {
             )}
           </div>
 
+          {f.role !== 'admin' && (
+            <div>
+              <h4 className="mb-1 text-sm font-semibold text-slate-700">Grupos de permissões</h4>
+              {!groups.data?.length ? (
+                <p className="text-xs text-slate-500">Nenhum grupo criado. Crie grupos na aba “Grupos de permissões” para não precisar ajustar usuário por usuário.</p>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-md border border-slate-200 p-2">
+                    {groups.data.map((g: any) => (
+                      <Checkbox key={g.id} label={<span>{g.name} <span className="text-xs text-slate-500">({g.permissions.length})</span></span>} checked={!!f.group_ids?.includes(g.id)}
+                        onChange={(v) => set('group_ids', v ? [...f.group_ids, g.id] : f.group_ids.filter((x: number) => x !== g.id))} />
+                    ))}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {chosenGroups.length ? 'As permissões vêm dos grupos marcados (no lugar do padrão do perfil).' : `Sem grupo: vale o padrão do perfil ${roles[f.role] ?? ''}.`}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
           <div>
             <h4 className="mb-2 text-sm font-semibold text-slate-700">Permissões</h4>
             {f.role === 'admin' ? <Notice kind="info">Administradores possuem todas as permissões.</Notice> : (
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {Object.entries(catalog).map(([p, label]) => (
-                  <Checkbox key={p} checked={!!effective(p)} onChange={(v) => togglePerm(p, v)}
-                    label={<span>{label} {!defaults.includes(p) && effective(p) && <Badge color="blue">concedida</Badge>}{defaults.includes(p) && !effective(p) && <Badge color="red">removida</Badge>}</span>} />
-                ))}
-              </div>
+              <>
+                <p className="mb-2 text-xs text-slate-500">Marque ou desmarque só as exceções deste usuário; o restante segue {chosenGroups.length ? 'os grupos' : 'o perfil'}.</p>
+                <PermissionChecklist
+                  catalog={catalog}
+                  checked={(p) => !!effective(p)}
+                  onToggle={togglePerm}
+                  badge={(p) => (!defaults.includes(p) && effective(p) ? <Badge color="blue">concedida</Badge> : defaults.includes(p) && !effective(p) ? <Badge color="red">removida</Badge> : null)}
+                />
+              </>
             )}
           </div>
         </div>

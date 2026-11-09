@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { one, query } from '../db/pool.js';
 import { newToken, sha256 } from '../lib/crypto.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
-import { effectivePermissions, type Permission, type Role } from './permissions.js';
+import { effectivePermissions, userGroupColumns, type Permission, type Role } from './permissions.js';
 
 export const COOKIE_NAME = 'slot1_session';
 
@@ -51,7 +51,7 @@ export async function destroySession(req: FastifyRequest, reply: FastifyReply): 
 
 export async function loadUserById(userId: number, sessionId = ''): Promise<AuthUser | undefined> {
   const u = await one(
-    `SELECT u.id, u.username, u.name, u.role, u.permissions_grant, u.permissions_revoke, u.all_clients, u.must_change_password, u.avatar_updated_at,
+    `SELECT u.id, u.username, u.name, u.role, u.permissions_grant, u.permissions_revoke, u.all_clients, u.must_change_password, u.avatar_updated_at,${userGroupColumns('u')},
             COALESCE(array_agg(uc.client_id) FILTER (WHERE uc.client_id IS NOT NULL), '{}') AS client_ids
        FROM users u LEFT JOIN user_clients uc ON uc.user_id = u.id
       WHERE u.id = $1 AND u.active GROUP BY u.id`,
@@ -63,7 +63,7 @@ export async function loadUserById(userId: number, sessionId = ''): Promise<Auth
     username: u.username,
     name: u.name,
     role: u.role,
-    permissions: effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke),
+    permissions: effectivePermissions(u.role, u.permissions_grant, u.permissions_revoke, u.group_permissions),
     allClients: u.role === 'admin' || u.all_clients,
     clientIds: u.client_ids,
     mustChangePassword: u.must_change_password,

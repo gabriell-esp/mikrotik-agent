@@ -25,6 +25,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'os.create': 'Ordem de serviço aberta', 'os.update': 'Ordem de serviço alterada', 'os.assign': 'Ordem de serviço atribuída',
   'os.finish': 'Ordem de serviço concluída', 'os.reopen': 'Ordem de serviço reaberta', 'os.cancel': 'Ordem de serviço cancelada',
   'os.helper': 'Companheiro da OS alterado', 'user.auto_delete': 'Usuário excluído automaticamente', 'user.settings': 'Configuração de usuários alterada',
+  'group.create': 'Grupo de permissões criado', 'group.update': 'Grupo de permissões alterado', 'group.delete': 'Grupo de permissões excluído',
   'planner.create': 'Item de planejamento criado', 'planner.delete': 'Item de planejamento excluído', 'planner.to_os': 'Planejamento virou OS',
 };
 

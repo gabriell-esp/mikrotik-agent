@@ -345,3 +345,48 @@ describe('perfil e exclusão automática de usuários', () => {
     expect(await q.one(`SELECT 1 FROM users WHERE username = 'tec'`)).toBeTruthy();
   });
 });
+
+describe('grupos de permissões', () => {
+  it('só quem gerencia usuários cria grupos; nome é único', async () => {
+    expect((await call('GET', '/api/permission-groups', undefined, 'tec')).status).toBe(403);
+    expect((await call('POST', '/api/permission-groups', { name: 'x', permissions: [] }, 'esc')).status).toBe(403);
+    expect((await call('POST', '/api/permission-groups', { name: 'Ruim', permissions: ['nao.existe'] })).status).toBe(400);
+    const g = await call('POST', '/api/permission-groups', { name: 'Campo', description: 'Técnicos de rua', permissions: ['os.execute', 'clients.view'] });
+    expect(g.status, JSON.stringify(g.body)).toBe(200);
+    expect(g.body).toMatchObject({ name: 'Campo', permissions: ['clients.view', 'os.execute'], members: 0 });
+    ids.groupCampo = g.body.id;
+    expect((await call('POST', '/api/permission-groups', { name: 'campo', permissions: [] })).status).toBe(409);
+  });
+
+  it('com grupo, a base passa a ser a do grupo; ajustes individuais continuam valendo', async () => {
+    const u = await newUser('grupado', 'escritorio', { group_ids: [ids.groupCampo] });
+    let me = await call('GET', '/api/auth/me', undefined, 'grupado');
+    expect(me.body.user.permissions.sort()).toEqual(['clients.view', 'os.execute']);
+    // Pode receber ordens (os.execute veio do grupo).
+    expect((await call('GET', '/api/os/assignees')).body.some((x: any) => x.id === u)).toBe(true);
+    // Remoção individual vence o grupo; concessão individual soma.
+    await call('PUT', `/api/users/${u}`, { name: 'GRUPADO', role: 'escritorio', permissions_grant: ['logs.view'], permissions_revoke: ['clients.view'] });
+    me = await call('GET', '/api/auth/me', undefined, 'grupado');
+    expect(me.body.user.permissions.sort()).toEqual(['logs.view', 'os.execute']);
+    // Edição sem group_ids mantém o grupo.
+    const list = (await call('GET', '/api/users')).body.find((x: any) => x.id === u);
+    expect(list.group_ids).toEqual([ids.groupCampo]);
+  });
+
+  it('alterar o grupo muda todos os membros de uma vez; excluir volta ao padrão do perfil', async () => {
+    const u2 = await newUser('grupado2', 'tecnico');
+    const adminId = (await q.one(`SELECT id FROM users WHERE username = 'admin'`)).id;
+    const upd = await call('PUT', `/api/permission-groups/${ids.groupCampo}`, {
+      name: 'Campo', permissions: ['os.execute', 'pppoe.view'], member_ids: [u2, (await q.one(`SELECT id FROM users WHERE username='grupado'`)).id, adminId],
+    });
+    expect(upd.status).toBe(200);
+    expect(upd.body.members).toBe(2); // administrador é ignorado
+    const me2 = await call('GET', '/api/auth/me', undefined, 'grupado2');
+    expect(me2.body.user.permissions.sort()).toEqual(['os.execute', 'pppoe.view']); // sem o padrão de técnico
+    expect((await call('GET', '/api/devices', undefined, 'grupado2')).status).toBe(403);
+    expect((await call('DELETE', `/api/permission-groups/${ids.groupCampo}`)).status).toBe(200);
+    const after = await call('GET', '/api/auth/me', undefined, 'grupado2');
+    expect(after.body.user.permissions).toContain('devices.view'); // voltou ao padrão de técnico
+    expect(await q.one(`SELECT 1 FROM audit_log WHERE action = 'group.delete' AND target = 'Campo'`)).toBeTruthy();
+  });
+});
