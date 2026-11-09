@@ -118,7 +118,7 @@ export async function notificationRoutes(app: FastifyInstance) {
     if (!r) throw notFound('Destinatário não encontrado.');
     const c: WppClient = await whatsappClient();
     if (!c.configured) throw badRequest('WhatsApp não configurado.');
-    const msg = `✅ *Teste de notificação*\n\nEste ${r.is_group ? 'grupo' : 'número'} receberá os alertas do monitoramento das MikroTiks.\nEnviado por ${user.name}.\n\n_Slot1 · Gerência MikroTik_`;
+    const msg = `✅ *Teste de notificação*\n\nEste ${r.is_group ? 'grupo' : 'número'} receberá os alertas do monitoramento de TI.\nEnviado por ${user.name}.\n\n_EasySO · Monitoramento de TI_`;
     const res = await sendLogged(c, r, msg, { events: ['test'], device_ids: [] });
     await audit(req, { action: 'notifications.test', target: r.name, success: res.ok, details: res.ok ? null : { erro: res.error } });
     if (!res.ok) throw new AppError(502, 'whatsapp', `Falha no envio: ${res.error}`);

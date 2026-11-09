@@ -141,7 +141,7 @@ function deviceLine(a: Alert): string {
 }
 
 export function buildMessage(alerts: Alert[]): string {
-  const footer = '\n\n_Slot1 · Gerência MikroTik_';
+  const footer = '\n\n_EasySO · Monitoramento de TI_';
   if (alerts.length === 1) {
     const a = alerts[0];
     const lines = [

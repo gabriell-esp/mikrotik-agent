@@ -11,22 +11,25 @@ import { useAuth } from '../lib/auth';
 import Avatar from './Avatar';
 import CommandPalette from './CommandPalette';
 import LiveIndicator from './LiveIndicator';
+import Logo from './Logo';
+import { BRAND } from '../lib/brand';
 
 /** perm: permissão exigida; com várias separadas por "|", basta ter uma. */
 interface NavItem { to: string; label: string; short?: string; icon: LucideIcon; perm: string }
 
+// Ordens de serviço em primeiro lugar (finalidade do produto); monitoramento de TI como módulo integrado.
 const SECTIONS: { title: string; items: NavItem[] }[] = [
-  { title: 'Monitoramento', items: [
-    { to: '/', label: 'Dashboard', short: 'Início', icon: LayoutDashboard, perm: 'dashboard.view' },
-    { to: '/wireguard', label: 'WireGuard', icon: Waypoints, perm: 'wireguard.view' },
-    { to: '/equipamentos', label: 'Equipamentos', short: 'Equip.', icon: Router, perm: 'devices.view' },
-    { to: '/unifi', label: 'UniFi', icon: Wifi, perm: 'unifi.view' },
-  ] },
-  { title: 'Atendimento', items: [
+  { title: 'Ordens de serviço', items: [
     { to: '/os', label: 'Ordens de serviço', short: 'Ordens', icon: ClipboardList, perm: 'os.view_all|os.manage|os.execute' },
     { to: '/planejamento', label: 'Planejamento', icon: ListTodo, perm: 'planner.manage' },
-    { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
     { to: '/clientes', label: 'Clientes', icon: Building2, perm: 'clients.view' },
+  ] },
+  { title: 'Monitoramento de TI', items: [
+    { to: '/painel', label: 'Painel de TI', short: 'Painel', icon: LayoutDashboard, perm: 'dashboard.view' },
+    { to: '/equipamentos', label: 'Equipamentos', short: 'Equip.', icon: Router, perm: 'devices.view' },
+    { to: '/unifi', label: 'Wi-Fi (UniFi)', short: 'Wi-Fi', icon: Wifi, perm: 'unifi.view' },
+    { to: '/pppoe', label: 'PPPoE', icon: Network, perm: 'pppoe.view' },
+    { to: '/wireguard', label: 'WireGuard', icon: Waypoints, perm: 'wireguard.view' },
   ] },
   { title: 'Administração', items: [
     { to: '/notificacoes', label: 'Notificações', icon: BellRing, perm: 'notifications.manage' },
@@ -39,7 +42,7 @@ const PAGE_LABELS: Record<string, string> = { '/senha': 'Alterar senha', '/perfi
 
 function readCollapsed(): boolean {
   try {
-    return localStorage.getItem('slot1.sidebar') === 'collapsed';
+    return localStorage.getItem('easyso.sidebar') === 'collapsed';
   } catch {
     return false;
   }
@@ -48,11 +51,11 @@ function readCollapsed(): boolean {
 function Brand({ compact }: { compact?: boolean }) {
   return (
     <div className={clsx('flex h-16 shrink-0 items-center gap-3', compact ? 'justify-center px-0' : 'px-5')}>
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-lg shadow-brand-900/40">S1</div>
+      <Logo className="size-9 shadow-lg shadow-brand-900/30" />
       {!compact && (
-        <div className="leading-tight">
-          <div className="text-sm font-semibold text-white">Slot1 Informática</div>
-          <div className="text-xs text-slate-400">Gerência MikroTik</div>
+        <div className="min-w-0 leading-tight">
+          <div className="text-[15px] font-semibold tracking-tight text-white">{BRAND.name}</div>
+          <div className="text-[11px] leading-snug text-slate-400">{BRAND.tagline}</div>
         </div>
       )}
     </div>
@@ -78,7 +81,7 @@ export default function Layout() {
   );
   const allItems = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const activeItem = [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => isActivePath(i.to, loc.pathname));
-  const currentLabel = PAGE_LABELS[loc.pathname] ?? activeItem?.label ?? 'Slot1';
+  const currentLabel = PAGE_LABELS[loc.pathname] ?? activeItem?.label ?? BRAND.name;
   const pages = useMemo(() => allItems.map((i) => ({ to: i.to, label: i.label, icon: <i.icon className="size-4" /> })), [allItems]);
 
   // Página nova começa do topo (a rolagem é a da própria página).
@@ -107,7 +110,7 @@ export default function Layout() {
   const toggleCollapsed = () => {
     setCollapsed((c) => {
       try {
-        localStorage.setItem('slot1.sidebar', c ? 'expanded' : 'collapsed');
+        localStorage.setItem('easyso.sidebar', c ? 'expanded' : 'collapsed');
       } catch { /* armazenamento indisponível */ }
       return !c;
     });
@@ -124,7 +127,7 @@ export default function Layout() {
   return (
     <div className="flex min-h-dvh">
       {/* Barra lateral (computador): fixa enquanto a página rola */}
-      <aside className={clsx('sticky top-0 hidden h-dvh shrink-0 flex-col bg-slate-950 transition-[width] duration-200 lg:flex', collapsed ? 'w-[72px]' : 'w-64')}>
+      <aside className={clsx('sticky top-0 hidden h-dvh shrink-0 flex-col bg-slate-900 transition-[width] duration-200 lg:flex', collapsed ? 'w-[72px]' : 'w-64')}>
         <Brand compact={collapsed} />
         <nav className="flex-1 space-y-6 overflow-y-auto overscroll-contain px-3 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {sections.map((s) => (
@@ -172,7 +175,7 @@ export default function Layout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-md sm:h-16 sm:gap-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5 lg:hidden">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white shadow-md shadow-brand-600/30">S1</div>
+            <Logo className="size-9 shadow-md shadow-brand-600/30" />
             <span className="truncate text-[15px] font-semibold text-slate-900 sm:hidden">{currentLabel}</span>
           </div>
           <button
@@ -181,7 +184,7 @@ export default function Layout() {
             className="order-last flex size-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-slate-300 hover:bg-white sm:order-none sm:h-9 sm:w-auto sm:min-w-0 sm:flex-1 sm:justify-start sm:gap-2.5 sm:rounded-lg sm:px-3 sm:text-sm sm:text-slate-400 md:max-w-md"
           >
             <Search className="size-[18px] shrink-0 sm:size-4" />
-            <span className="hidden truncate sm:inline">Buscar equipamento, cliente ou PPPoE…</span>
+            <span className="hidden truncate sm:inline">Buscar ordem, cliente ou equipamento…</span>
             <kbd className="ml-auto hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 sm:block">Ctrl K</kbd>
           </button>
           <div className="ml-auto flex items-center gap-2 sm:gap-3">

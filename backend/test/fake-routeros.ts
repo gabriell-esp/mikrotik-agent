@@ -148,7 +148,7 @@ export function sampleRouter(): Record<string, Rec[]> {
     '/disk': [],
     '/interface': [
       { name: 'ether1', type: 'ether', running: 'true', disabled: 'false', 'rx-byte': '1000', 'tx-byte': '2000' },
-      { name: 'wg-slot1', type: 'wg', running: 'true', disabled: 'false' },
+      { name: 'wg-central', type: 'wg', running: 'true', disabled: 'false' },
     ],
     '/log': [
       { time: '2026-10-13 23:00:00', topics: 'system,info', message: 'router rebooted' },
@@ -166,12 +166,12 @@ export function sampleRouter(): Record<string, Rec[]> {
     ],
     '/ppp/active': [{ name: 'joao', service: 'pppoe', address: '10.0.0.10', 'caller-id': 'AA:BB:CC:DD:EE:01', uptime: '2h3m' }],
     '/interface/pppoe-server/server': [{ 'service-name': 'pppoe', interface: 'ether2', disabled: 'false' }],
-    '/interface/wireguard': [{ name: 'wg-slot1', 'listen-port': '13231', 'private-key': 'PRIVADA-NAO-DEVE-SAIR', 'public-key': 'PUBA=' }],
+    '/interface/wireguard': [{ name: 'wg-central', 'listen-port': '13231', 'private-key': 'PRIVADA-NAO-DEVE-SAIR', 'public-key': 'PUBA=' }],
     '/interface/wireguard/peers': [
-      { interface: 'wg-slot1', 'public-key': 'PEER1KEY=', 'allowed-address': '10.200.0.2/32,192.168.10.0/24', comment: 'Cliente A',
+      { interface: 'wg-central', 'public-key': 'PEER1KEY=', 'allowed-address': '10.200.0.2/32,192.168.10.0/24', comment: 'Cliente A',
         'current-endpoint-address': '177.10.10.10', 'current-endpoint-port': '51820', 'last-handshake': '1m10s', rx: '123456', tx: '654321', disabled: 'false',
         'preshared-key': 'PSK-NAO-DEVE-SAIR' },
-      { interface: 'wg-slot1', 'public-key': 'PEER2KEY=', 'allowed-address': '10.200.0.3/32', comment: 'Cliente B', rx: '0', tx: '0', disabled: 'false' },
+      { interface: 'wg-central', 'public-key': 'PEER2KEY=', 'allowed-address': '10.200.0.3/32', comment: 'Cliente B', rx: '0', tx: '0', disabled: 'false' },
     ],
   };
 }

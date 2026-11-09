@@ -40,14 +40,14 @@ Pela API key o sistema usa a *UniFi Network Integration API* (`/proxy/network/in
 
 ## Preparação de cada controladora
 
-1. **Credencial.** Use uma API key (ver acima) ou **crie um usuário local dedicado** na controladora. Em UniFi OS: *Settings → Admins & Users → Add Admin*, marque **Restrict to Local Access Only**, dê um nome (ex.: `slot1-sistema`) e uma senha forte.
+1. **Credencial.** Use uma API key (ver acima) ou **crie um usuário local dedicado** na controladora. Em UniFi OS: *Settings → Admins & Users → Add Admin*, marque **Restrict to Local Access Only**, dê um nome (ex.: `easyso-sistema`) e uma senha forte.
    - Função **Site Admin** (ou Super Admin) para usar as ações. Com **View Only** o sistema só consegue ler, e as ações retornam "sem permissão".
    - **Não use conta Ubiquiti (SSO) com verificação em duas etapas.** O login automático não consegue responder ao MFA.
 2. **Endereço acessível pelo servidor.** O caminho é o mesmo das MikroTiks, pelo túnel WireGuard. Use uma das opções:
    - **Rota para a rede do cliente:** inclua a rede local do condomínio (ex.: `192.168.10.0/24`) no `allowed-address` do peer na central e, no peer da central dentro da MikroTik do cliente, a origem do servidor (ou o NAT da central, ver [ROUTEROS.md](ROUTEROS.md)). Cadastre o IP local da Cloud Key (ex.: `https://192.168.10.5`).
    - **Encaminhamento de porta na MikroTik do cliente:** `dst-nat` do IP do túnel para a Cloud Key. Por exemplo, `https://10.200.0.5:8443` encaminhado para `192.168.10.5:443`. Restrinja a origem ao IP do servidor/central.
    ```routeros
-   /ip firewall nat add chain=dstnat in-interface=wg-slot1 dst-address=10.200.0.5 protocol=tcp dst-port=8443 src-address=10.200.0.1 action=dst-nat to-addresses=192.168.10.5 to-ports=443 comment="Slot1 -> Cloud Key"
+   /ip firewall nat add chain=dstnat in-interface=wg-central dst-address=10.200.0.5 protocol=tcp dst-port=8443 src-address=10.200.0.1 action=dst-nat to-addresses=192.168.10.5 to-ports=443 comment="EasySO -> Cloud Key"
    ```
 3. **(Opcional) Fingerprint:** a Cloud Key usa certificado autoassinado. Para fixá-lo, copie o SHA-256 do certificado (no navegador: cadeado → certificado → impressão digital SHA-256) para o campo "Fingerprint" do cadastro.
 

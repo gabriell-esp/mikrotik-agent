@@ -10,7 +10,7 @@ import { FakeRouterOS, sampleRouter } from './fake-routeros.js';
 import { FakeWppConnect } from './fake-wppconnect.js';
 
 const DB_PORT = 54328;
-const H = { 'x-requested-with': 'slot1' };
+const H = { 'x-requested-with': 'easyso' };
 let app: FastifyInstance;
 let pgServer: PGLiteSocketServer;
 let router: FakeRouterOS;
@@ -74,11 +74,11 @@ const ids: Record<string, number> = {};
 describe('configuração e conexão', () => {
   it('salva configuração sem expor a chave secreta', async () => {
     const r = await call('PUT', '/api/notifications/settings', {
-      enabled: true, base_url: wpp.url, session: 'slot1', secret_key: wpp.secret, delay_sec: 0, resource_threshold: 90,
+      enabled: true, base_url: wpp.url, session: 'easyso', secret_key: wpp.secret, delay_sec: 0, resource_threshold: 90,
     });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const s = await call('GET', '/api/notifications/settings');
-    expect(s.body).toMatchObject({ enabled: true, has_secret_key: true, session: 'slot1' });
+    expect(s.body).toMatchObject({ enabled: true, has_secret_key: true, session: 'easyso' });
     expect(JSON.stringify(s.body)).not.toContain(wpp.secret);
     const raw = await q.one(`SELECT value FROM settings WHERE key = 'whatsapp'`);
     expect(JSON.stringify(raw)).not.toContain(wpp.secret);
@@ -103,7 +103,7 @@ describe('configuração e conexão', () => {
 
   it('lista grupos', async () => {
     const g = await call('GET', '/api/notifications/whatsapp/groups');
-    expect(g.body).toEqual([{ id: '120363000000000001', name: 'NOC Slot1' }]);
+    expect(g.body).toEqual([{ id: '120363000000000001', name: 'NOC Central' }]);
   });
 
   it('escritório não acessa configurações de notificação', async () => {

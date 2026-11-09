@@ -24,7 +24,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
       method: opts.method ?? 'GET',
       credentials: 'same-origin',
       headers: {
-        'X-Requested-With': 'slot1',
+        'X-Requested-With': 'easyso',
         ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,

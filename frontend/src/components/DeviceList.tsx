@@ -28,7 +28,7 @@ export default function DeviceList({ rows, showModel }: { rows: any[]; showModel
       mobile: 'subtitle',
       cell: (d) => (
         <>
-          {d.client_name ?? <span className="text-slate-400">{d.is_central ? 'Slot1' : '—'}</span>}
+          {d.client_name ?? <span className="text-slate-400">{d.is_central ? 'Central' : '—'}</span>}
           <span className="mono md:hidden"> · {d.host}</span>
         </>
       ),

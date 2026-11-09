@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const DB_PORT = 54325;
-const H = { 'x-requested-with': 'slot1' };
+const H = { 'x-requested-with': 'easyso' };
 let app: FastifyInstance;
 let pgServer: PGLiteSocketServer;
 let q: typeof import('../src/db/pool.js');
@@ -131,7 +131,7 @@ describe('credenciais salvas não podem ser desviadas', () => {
   });
 
   it('WhatsApp: trocar a URL exige a chave de novo', async () => {
-    const base = { enabled: false, session: 'slot1', delay_sec: 60, resource_threshold: 90 };
+    const base = { enabled: false, session: 'easyso', delay_sec: 60, resource_threshold: 90 };
     expect((await call('PUT', '/api/notifications/settings', { ...base, base_url: 'http://wppconnect:21465', secret_key: 'chave' })).status).toBe(200);
     expect((await call('PUT', '/api/notifications/settings', { ...base, base_url: 'http://203.0.113.66:21465' })).status).toBe(400);
     expect((await call('PUT', '/api/notifications/settings', { ...base, base_url: 'http://wppconnect:21465', delay_sec: 30 })).status).toBe(200);

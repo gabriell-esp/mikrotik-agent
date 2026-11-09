@@ -37,7 +37,9 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<DashboardPage />} />
+        {/* Início: ordens de serviço (finalidade do produto); quem não usa ordens cai no painel de TI. */}
+        <Route index element={<Navigate to={osAccess ? '/os' : can('dashboard.view') ? '/painel' : '/perfil'} replace />} />
+        <Route path="painel" element={<DashboardPage />} />
         {can('wireguard.view') && <Route path="wireguard" element={<WireguardPage />} />}
         {can('clients.view') && <Route path="clientes" element={<ClientsPage />} />}
         <Route path="equipamentos" element={<DevicesPage />} />

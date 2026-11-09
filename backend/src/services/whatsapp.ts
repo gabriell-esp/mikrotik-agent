@@ -17,7 +17,7 @@ export interface WhatsappSettings {
 export const WA_DEFAULTS: WhatsappSettings = {
   enabled: false,
   base_url: 'http://wppconnect:21465',
-  session: 'slot1',
+  session: 'easyso',
   secret_key_enc: null,
   token_enc: null,
   delay_sec: 120,

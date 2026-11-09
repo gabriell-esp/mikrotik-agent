@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const DB_PORT = 54326;
-const H = { 'x-requested-with': 'slot1' };
+const H = { 'x-requested-with': 'easyso' };
 let app: FastifyInstance;
 let pgServer: PGLiteSocketServer;
 let q: typeof import('../src/db/pool.js');
@@ -307,8 +307,8 @@ describe('contatos obrigatórios e dupla de técnicos', () => {
 describe('perfil e exclusão automática de usuários', () => {
   it('cada usuário edita o próprio perfil e envia a foto', async () => {
     expect((await call('PUT', '/api/profile', { name: 'Técnico Um', phone: '123' }, 'tec')).status).toBe(400);
-    const p = await call('PUT', '/api/profile', { name: 'Técnico Um', email: 'tec@slot1.info', phone: '(49) 98888-7777' }, 'tec');
-    expect(p.body).toMatchObject({ name: 'Técnico Um', phone: '49988887777', email: 'tec@slot1.info' });
+    const p = await call('PUT', '/api/profile', { name: 'Técnico Um', email: 'tec@exemplo.com.br', phone: '(49) 98888-7777' }, 'tec');
+    expect(p.body).toMatchObject({ name: 'Técnico Um', phone: '49988887777', email: 'tec@exemplo.com.br' });
     expect((await call('PUT', '/api/profile/avatar', { image: Buffer.from('nao e jpeg').toString('base64') }, 'tec')).status).toBe(400);
     const av = await call('PUT', '/api/profile/avatar', { image: jpeg(5000) }, 'tec');
     expect(av.body.avatar_updated_at).toBeTruthy();

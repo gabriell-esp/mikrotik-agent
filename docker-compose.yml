@@ -1,4 +1,4 @@
-# Slot1 · Gerência MikroTik — stack de produção.
+# EasySO · Ordens de Serviço Facilitadas — stack de produção.
 # Antes de subir: copie .env.example para .env e crie secrets/master_key (veja README).
 services:
   db:

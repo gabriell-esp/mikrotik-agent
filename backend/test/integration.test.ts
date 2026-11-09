@@ -16,7 +16,7 @@ let routerA: FakeRouterOS;
 let routerB: FakeRouterOS;
 let q: typeof import('../src/db/pool.js');
 
-const H = { 'x-requested-with': 'slot1' };
+const H = { 'x-requested-with': 'easyso' };
 let adminCookie = '';
 
 async function call(method: string, url: string, body?: unknown, cookie = adminCookie) {
@@ -91,7 +91,7 @@ describe('cadastro e WireGuard', () => {
     const test = await call('POST', '/api/devices/test', devicePayload({ host: '127.0.0.1', api_port: central.port }));
     expect(test.body).toMatchObject({ ok: true, method: 'api', version: '7.16.1 (stable)', identity: 'CLIENTE-A-RB' });
 
-    const c = await call('POST', '/api/devices', devicePayload({ name: 'Central Slot1', is_central: true, host: '127.0.0.1', api_port: central.port }));
+    const c = await call('POST', '/api/devices', devicePayload({ name: 'Central da empresa', is_central: true, host: '127.0.0.1', api_port: central.port }));
     expect(c.status, JSON.stringify(c.body)).toBe(200);
     ids.central = c.body.id;
     const a = await call('POST', '/api/devices', devicePayload({ name: 'RB Cliente A', client_id: ids.clientA, host: '127.0.0.1', api_port: routerA.port }));

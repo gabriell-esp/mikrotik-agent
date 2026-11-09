@@ -55,7 +55,7 @@ export class FakeWppConnect {
         this.connected = false;
         return send(200, { status: true });
       case 'all-groups':
-        return send(200, { status: 'success', response: [{ id: { _serialized: '120363000000000001@g.us' }, name: 'NOC Slot1' }] });
+        return send(200, { status: 'success', response: [{ id: { _serialized: '120363000000000001@g.us' }, name: 'NOC Central' }] });
       case 'send-message':
         if (!this.connected) return send(400, { status: 'error', message: 'Sessão desconectada' });
         if (this.failSends > 0) {

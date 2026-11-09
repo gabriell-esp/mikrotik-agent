@@ -1,6 +1,8 @@
-# Slot1 · Gerência MikroTik
+# EasySO · Ordens de Serviço Facilitadas
 
-Sistema web para centralizar o monitoramento e a administração das MikroTiks atendidas pela Slot1 Informática, acessadas pelos túneis WireGuard da MikroTik central.
+Sistema web de **ordens de serviço** para equipes técnicas: abertura e atribuição, execução em campo pelo celular (cronômetro, relatório, materiais, compras e fotos), contato com o cliente pelo WhatsApp, planejamento de serviços futuros e orçamentos, com controle de permissões e auditoria. Inclui um módulo integrado de **monitoramento de TI** (MikroTik via WireGuard, PPPoE, Wi-Fi UniFi e alertas pelo WhatsApp).
+
+**Identidade visual:** o nome e o bordão ficam em `frontend/src/lib/brand.ts`; a cor da marca em `frontend/src/index.css` (`--color-brand-*`); a logo e o ícone em `frontend/public/brand/logo.svg` e `favicon.svg` (hoje com uma logo de demonstração: troque os arquivos mantendo os nomes).
 
 ```
 Navegador ──HTTPS──▶ Nginx (servidor) ──▶ web (Nginx + SPA React) ──/api──▶ backend (Node/Fastify)
@@ -55,7 +57,7 @@ docker compose exec backend node dist/cli/create-admin.js admin "Administrador"
 
 O último comando imprime uma senha temporária; a troca é obrigatória no primeiro acesso. Para definir a senha você mesmo, use `-e ADMIN_PASSWORD=...` no `docker compose exec`.
 
-A interface fica em `http://127.0.0.1:8080` (publicada só no host). Configure o Nginx do servidor com TLS usando [deploy/nginx-slot1-mikrotik.conf](deploy/nginx-slot1-mikrotik.conf) e mantenha `COOKIE_SECURE=true`.
+A interface fica em `http://127.0.0.1:8080` (publicada só no host). Configure o Nginx do servidor com TLS usando [deploy/nginx-easyso.conf](deploy/nginx-easyso.conf) e mantenha `COOKIE_SECURE=true`.
 
 **Backup:** faça backup do volume `pgdata` (ex.: `docker compose exec db pg_dump -U mikrotik mikrotik > backup.sql`) **e** do arquivo `secrets/master_key`, guardados em locais separados.
 
@@ -64,10 +66,10 @@ A interface fica em `http://127.0.0.1:8080` (publicada só no host). Configure o
 Se preferir rodar sem Docker, o backend usa `npm --prefix backend run build && npm --prefix backend start` (com as variáveis do `.env`). O frontend pode ser servido pelo `vite preview`, que encaminha `/api` para o backend:
 
 ```bash
-ALLOWED_HOSTS=mikrotik.slot1.info API_URL=http://localhost:3000 npm --prefix frontend run preview -- --host 127.0.0.1
+ALLOWED_HOSTS=os.suaempresa.com.br API_URL=http://localhost:3000 npm --prefix frontend run preview -- --host 127.0.0.1
 ```
 
-- `ALLOWED_HOSTS`: domínios aceitos, separados por vírgula. O padrão é `mikrotik.slot1.info`. Sem o domínio na lista, o Vite responde *"Blocked request. This host is not allowed"*.
+- `ALLOWED_HOSTS`: domínios aceitos, separados por vírgula. Sem padrão: informe o domínio usado. Sem o domínio na lista, o Vite responde *"Blocked request. This host is not allowed"*.
 - `API_URL`: endereço do backend (padrão `http://localhost:3000`).
 - O Nginx do servidor faz o TLS e encaminha para `http://127.0.0.1:4173`.
 
@@ -116,7 +118,7 @@ A interface abre em http://localhost:5173 (o Vite encaminha `/api` para a porta 
 
 ## PPPoE por MikroTik de condomínio
 
-O PPPoE é administrado nas MikroTiks dos clientes (condomínios), onde o servidor PPPoE autentica o roteador de cada apartamento. A central da Slot1 não participa: não é coletada, não aparece e não aceita operações de PPPoE.
+O PPPoE é administrado nas MikroTiks dos clientes (condomínios), onde o servidor PPPoE autentica o roteador de cada apartamento. A central da empresa não participa: não é coletada, não aparece e não aceita operações de PPPoE.
 
 - **PPPoE** lista as MikroTiks de clientes como cards, com usuários, online e desabilitados de cada uma. As que não têm servidor PPPoE ficam ocultas, com opção de mostrá-las.
 - Ao abrir um condomínio (`/pppoe/:id`), você gerencia só aquela MikroTik: usuários (criar, editar, habilitar/desabilitar, excluir, ver senha), sessões ativas e perfis/servidores.
@@ -129,7 +131,7 @@ O PPPoE é administrado nas MikroTiks dos clientes (condomínios), onde o servid
 ## Notificações pelo WhatsApp (WPPConnect)
 
 1. Defina `WPP_SECRET_KEY` no `.env` e suba com `docker compose --profile whatsapp up -d`. O WPPConnect fica só na rede interna do Compose, sem porta publicada.
-2. No sistema, abra **Notificações**, informe a URL `http://wppconnect:21465` (ou `http://127.0.0.1:21465` se o backend estiver em `network_mode: host`, publicando a porta como indicado no `docker-compose.yml`), a sessão (ex.: `slot1`) e a mesma chave secreta, e ative o envio.
+2. No sistema, abra **Notificações**, informe a URL `http://wppconnect:21465` (ou `http://127.0.0.1:21465` se o backend estiver em `network_mode: host`, publicando a porta como indicado no `docker-compose.yml`), a sessão (ex.: `easyso`) e a mesma chave secreta, e ative o envio.
 3. Clique em **Conectar WhatsApp** e leia o QR code em *WhatsApp → Aparelhos conectados*. A tela confirma sozinha. Recomenda-se um número exclusivo para o monitoramento.
 4. Cadastre os **destinatários** (número com DDD ou grupo, que pode ser escolhido da lista do número conectado), os eventos de cada um e, se quiser, os clientes que ele acompanha. Use **Testar** para validar.
 

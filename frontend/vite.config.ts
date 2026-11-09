@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 // Domínios aceitos pelo servidor do Vite (dev/preview). Separe vários por vírgula.
-const allowedHosts = (process.env.ALLOWED_HOSTS ?? 'mikrotik.slot1.info')
+const allowedHosts = (process.env.ALLOWED_HOSTS ?? '')
   .split(',')
   .map((h) => h.trim())
   .filter(Boolean);

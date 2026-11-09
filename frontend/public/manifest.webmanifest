@@ -1,16 +1,16 @@
 {
-  "name": "Slot1 · Gerência MikroTik",
-  "short_name": "Slot1 MikroTik",
-  "description": "Monitoramento e administração das MikroTiks dos clientes da Slot1 Informática.",
+  "name": "EasySO · Ordens de Serviço Facilitadas",
+  "short_name": "EasySO",
+  "description": "Ordens de serviço do início ao fim: abertura, atribuição, execução em campo, fotos e relatórios, com monitoramento de TI integrado.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f8fafc",
+  "background_color": "#fafafa",
   "theme_color": "#ffffff",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+    { "src": "/brand/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/brand/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ]
 }

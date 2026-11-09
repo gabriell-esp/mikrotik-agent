@@ -38,7 +38,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   app.addHook('onRequest', async (req, reply) => {
     await resolveUser(req);
     // Proteção CSRF complementar ao SameSite=Strict: requisições de escrita precisam do cabeçalho da SPA.
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-requested-with'] !== 'slot1') {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-requested-with'] !== 'easyso') {
       return reply.code(403).send({ error: 'csrf', message: 'Requisição recusada (cabeçalho ausente).' });
     }
   });

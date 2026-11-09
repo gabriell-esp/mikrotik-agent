@@ -110,7 +110,7 @@ export default function DeviceForm({ open, onClose, initial, onSaved }: { open: 
           </Field>
           <Field label="Cliente">
             <Select value={f.client_id ?? ''} onChange={(e) => set('client_id', e.target.value ? Number(e.target.value) : null)}>
-              <option value="">{f.is_central ? '— (central da Slot1)' : 'Selecione…'}</option>
+              <option value="">{f.is_central ? '— (central da empresa)' : 'Selecione…'}</option>
               {(clients.data ?? []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </Select>
           </Field>

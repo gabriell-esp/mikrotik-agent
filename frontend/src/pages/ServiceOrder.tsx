@@ -341,7 +341,7 @@ function Photos({ o, onChanged, me }: { o: any; onChanged: () => void; me: numbe
 
 function Contacts({ o }: { o: any }) {
   const contacts: { name: string; phone: string }[] = o.contacts ?? [];
-  const msg = `Olá! Aqui é da Slot1 Informática, sobre a ${osNumber(o.id)} (${o.title}).`;
+  const msg = `Olá! Sobre a ${osNumber(o.id)} (${o.title}).`;
   if (!contacts.length) {
     return <Notice>Esta ordem não tem contato cadastrado. {o.can.manage ? 'Edite a ordem e informe ao menos um contato com WhatsApp.' : 'Peça ao escritório para incluir.'}</Notice>;
   }

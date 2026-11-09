@@ -32,15 +32,15 @@ O método **Automático** tenta, nesta ordem: API-SSL → REST → API (se liber
 RouterOS v7:
 
 ```routeros
-/user group add name=slot1-gerencia policy=read,write,api,rest-api,sensitive,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!test,!romon
-/user add name=slot1-api group=slot1-gerencia password="SENHA-FORTE" address=10.200.0.1/32 comment="Sistema Slot1"
+/user group add name=easyso-gerencia policy=read,write,api,rest-api,sensitive,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!test,!romon
+/user add name=easyso-api group=easyso-gerencia password="SENHA-FORTE" address=10.200.0.1/32 comment="Sistema EasySO"
 ```
 
 RouterOS v6 (não tem a política `rest-api`):
 
 ```routeros
-/user group add name=slot1-gerencia policy=read,write,api,sensitive,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!test,!romon
-/user add name=slot1-api group=slot1-gerencia password="SENHA-FORTE" address=10.200.0.1/32 comment="Sistema Slot1"
+/user group add name=easyso-gerencia policy=read,write,api,sensitive,!local,!telnet,!ssh,!ftp,!reboot,!policy,!winbox,!password,!web,!sniff,!test,!romon
+/user add name=easyso-api group=easyso-gerencia password="SENHA-FORTE" address=10.200.0.1/32 comment="Sistema EasySO"
 ```
 
 - Em versões v7 que ainda não têm a política `rest-api`, o comando retorna erro de política inválida: remova-a. Se o REST responder “Autenticação recusada” com a senha correta, troque `!web` por `web` (versões iniciais do v7 exigiam `web` para o REST) ou mantenha somente o api-ssl.
@@ -53,14 +53,14 @@ RouterOS v6 (não tem a política `rest-api`):
 
 ```routeros
 # CA local (necessária para assinar; sem ela o RouterOS responde "CA not found")
-/certificate add name=slot1-ca common-name=slot1-ca key-usage=key-cert-sign,crl-sign days-valid=3650
-/certificate sign slot1-ca
+/certificate add name=easyso-ca common-name=easyso-ca key-usage=key-cert-sign,crl-sign days-valid=3650
+/certificate sign easyso-ca
 # Certificado dos serviços, assinado pela CA
-/certificate add name=slot1-api common-name=slot1-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign slot1-api ca=slot1-ca
-/ip service set api-ssl certificate=slot1-api disabled=no address=10.200.0.1/32
+/certificate add name=easyso-api common-name=easyso-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
+/certificate sign easyso-api ca=easyso-ca
+/ip service set api-ssl certificate=easyso-api disabled=no address=10.200.0.1/32
 # REST (somente v7.1+):
-/ip service set www-ssl certificate=slot1-api disabled=no address=10.200.0.1/32
+/ip service set www-ssl certificate=easyso-api disabled=no address=10.200.0.1/32
 ```
 
 Para **fixar o certificado** (pinning), copie o fingerprint SHA-256 (`/certificate print detail`, campo `fingerprint` no v7) para o campo “Fingerprint SHA-256” do cadastro do equipamento.
@@ -70,7 +70,7 @@ Para **fixar o certificado** (pinning), copie o fingerprint SHA-256 (`/certifica
 Se o firewall de input bloqueia por padrão, libere as portas de gerência **apenas a partir do servidor**, pela interface do túnel:
 
 ```routeros
-/ip firewall filter add chain=input in-interface=wg-slot1 src-address=10.200.0.1 protocol=tcp dst-port=8729,443 action=accept comment="Slot1 gerencia" place-before=0
+/ip firewall filter add chain=input in-interface=wg-central src-address=10.200.0.1 protocol=tcp dst-port=8729,443 action=accept comment="EasySO gerencia" place-before=0
 ```
 
 ## Central WireGuard
@@ -90,18 +90,18 @@ Ao cadastrar a partir de um peer, o sistema sugere o primeiro IP `/32` do `allow
 O RouterOS recusou a negociação TLS. Na grande maioria das vezes, o serviço `api-ssl` (ou `www-ssl`) está habilitado **sem certificado**. Corrija na MikroTik:
 
 ```routeros
-/certificate add name=slot1-ca common-name=slot1-ca key-usage=key-cert-sign,crl-sign days-valid=3650
-/certificate sign slot1-ca
-/certificate add name=slot1-api common-name=slot1-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
-/certificate sign slot1-api ca=slot1-ca
-/ip service set api-ssl certificate=slot1-api disabled=no
+/certificate add name=easyso-ca common-name=easyso-ca key-usage=key-cert-sign,crl-sign days-valid=3650
+/certificate sign easyso-ca
+/certificate add name=easyso-api common-name=easyso-api days-valid=3650 key-usage=digital-signature,key-encipherment,tls-server
+/certificate sign easyso-api ca=easyso-ca
+/ip service set api-ssl certificate=easyso-api disabled=no
 # opcional, para o REST (v7.1+):
-/ip service set www-ssl certificate=slot1-api disabled=no
+/ip service set www-ssl certificate=easyso-api disabled=no
 ```
 
-Confira com `/ip service print detail where name~"ssl"`. O campo `certificate` deve mostrar `slot1-api`. A assinatura (`sign`) pode levar alguns segundos. Aguarde as flags `K` (chave privada) e `T` (confiável) em `/certificate print` antes de testar.
+Confira com `/ip service print detail where name~"ssl"`. O campo `certificate` deve mostrar `easyso-api`. A assinatura (`sign`) pode levar alguns segundos. Aguarde as flags `K` (chave privada) e `T` (confiável) em `/certificate print` antes de testar.
 
-Se o `sign` responder **"CA not found"**, falta a CA local: crie e assine o `slot1-ca` primeiro e assine o certificado com `ca=slot1-ca`, como acima. Se o `slot1-api` já existir, não precisa recriá-lo; basta rodar `/certificate sign slot1-api ca=slot1-ca`.
+Se o `sign` responder **"CA not found"**, falta a CA local: crie e assine o `easyso-ca` primeiro e assine o certificado com `ca=easyso-ca`, como acima. Se o `easyso-api` já existir, não precisa recriá-lo; basta rodar `/certificate sign easyso-api ca=easyso-ca`.
 
 Se ainda falhar, verifique:
 - **Versão do TLS** (v7): o padrão aceita TLS 1.2. Não restrinja a uma versão mais antiga.

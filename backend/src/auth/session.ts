@@ -5,7 +5,7 @@ import { newToken, sha256 } from '../lib/crypto.js';
 import { forbidden, unauthorized } from '../lib/errors.js';
 import { effectivePermissions, userGroupColumns, type Permission, type Role } from './permissions.js';
 
-export const COOKIE_NAME = 'slot1_session';
+export const COOKIE_NAME = 'easyso_session';
 
 export interface AuthUser {
   id: number;

@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Building2, CornerDownLeft, Network, Router, Search, Wifi } from 'lucide-react';
+import { Building2, ClipboardList, CornerDownLeft, Network, Router, Search, Wifi } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { get } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { osNumber } from '../lib/os';
+import { OsStatusBadge } from '../pages/ServiceOrders';
 import { DeviceStatusBadge } from './ui';
 
 interface Item {
@@ -26,7 +28,7 @@ function useDebounced<T>(v: T, ms = 250) {
   return d;
 }
 
-/** Busca global (Ctrl+K): equipamentos, clientes e usuários PPPoE. */
+/** Busca global (Ctrl+K): ordens de serviço, clientes, equipamentos e usuários PPPoE. */
 export default function CommandPalette({ open, onClose, pages }: { open: boolean; onClose: () => void; pages: { to: string; label: string; icon: ReactNode }[] }) {
   const { can } = useAuth();
   const nav = useNavigate();
@@ -43,6 +45,13 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
     }
   }, [open]);
 
+  const osAccess = can('os.view_all') || can('os.manage') || can('os.execute');
+  const orders = useQuery({
+    queryKey: ['palette-os', t],
+    queryFn: () => get('/os', { status: 'todas', q: t }),
+    enabled: open && t.length >= 1 && osAccess,
+    meta: { live: false },
+  });
   const devices = useQuery({ queryKey: ['devices'], queryFn: () => get('/devices'), enabled: open && can('devices.view') });
   const clients = useQuery({ queryKey: ['clients'], queryFn: () => get('/clients'), enabled: open && can('clients.view') });
   const unifi = useQuery({ queryKey: ['unifi', 'controllers'], queryFn: () => get('/unifi/controllers'), enabled: open && can('unifi.view') });
@@ -61,6 +70,10 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
       return out;
     }
     pages.filter((p) => p.label.toLowerCase().includes(low)).forEach((p) => out.push({ key: `p${p.to}`, group: 'Ir para', icon: p.icon, title: p.label, to: p.to }));
+    (orders.data?.rows ?? []).slice(0, 8).forEach((o: any) => out.push({
+      key: `o${o.id}`, group: 'Ordens de serviço', icon: <ClipboardList className="size-4" />, title: `${osNumber(o.id)} · ${o.title}`,
+      subtitle: [o.client_name, o.assigned_name].filter(Boolean).join(' · '), extra: <OsStatusBadge status={o.status} />, to: `/os/${o.id}`,
+    }));
     (devices.data ?? [])
       .filter((d: any) => [d.name, d.host, d.identity, d.client_name].join(' ').toLowerCase().includes(low))
       .slice(0, 8)
@@ -84,7 +97,7 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
       subtitle: [s.comment, s.device_name, s.client_name].filter(Boolean).join(' · '), to: `/pppoe/${s.device_id}?busca=${encodeURIComponent(s.name)}`,
     }));
     return out;
-  }, [t, pages, devices.data, clients.data, ppp.data, unifi.data]);
+  }, [t, pages, orders.data, devices.data, clients.data, ppp.data, unifi.data]);
 
   useEffect(() => setActive(0), [t]);
 
@@ -104,7 +117,7 @@ export default function CommandPalette({ open, onClose, pages }: { open: boolean
             ref={inputRef}
             value={term}
             onChange={(e) => setTerm(e.target.value)}
-            placeholder="Buscar equipamento, cliente ou usuário PPPoE…"
+            placeholder="Buscar ordem, cliente, equipamento ou PPPoE…"
             className="h-13 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
             onKeyDown={(e) => {
               if (e.key === 'Escape') onClose();

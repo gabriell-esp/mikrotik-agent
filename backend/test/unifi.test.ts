@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FakeUnifi } from './fake-unifi.js';
 
 const DB_PORT = 54327;
-const H = { 'x-requested-with': 'slot1' };
+const H = { 'x-requested-with': 'easyso' };
 let app: FastifyInstance;
 let pgServer: PGLiteSocketServer;
 let os: FakeUnifi;
