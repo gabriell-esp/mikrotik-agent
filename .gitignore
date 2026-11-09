@@ -7,3 +7,6 @@ secrets/
 !secrets/.gitkeep
 *.log
 .claude/
+
+# Ajustes locais do servidor (portas etc.), carregados automaticamente pelo Docker Compose
+docker-compose.override.yml
